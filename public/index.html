@@ -8,7 +8,7 @@
   <style>
     :root {
       --bg: #0f172a; --panel: #1e293b; --panel-2: #273449;
-      --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --accent-2: #0ea5e9;
+      --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
       --ok: #22c55e; --bad: #ef4444; --warn: #f59e0b; --border: #334155;
     }
     * { box-sizing: border-box; }
@@ -17,7 +17,7 @@
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
     }
-    .wrap { max-width: 720px; margin: 0 auto; }
+    .wrap { max-width: 760px; margin: 0 auto; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 0 8px; }
     h1 { font-size: 1.15rem; margin: 0; font-weight: 650; }
     .sub { color: var(--muted); font-size: .8rem; margin-top: 2px; }
@@ -32,27 +32,30 @@
     .banner.err { background: rgba(239,68,68,.12); border: 1px solid var(--bad); color: #fecaca; }
     .banner code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 5px; }
 
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
-    .scene {
-      appearance: none; cursor: pointer; text-align: left;
-      background: var(--panel); color: var(--text); border: 2px solid var(--border);
-      border-radius: 14px; padding: 16px; min-height: 92px;
-      display: flex; flex-direction: column; justify-content: space-between; gap: 8px;
-      transition: transform .06s ease, border-color .15s, background .15s;
-    }
-    .scene:hover { background: var(--panel-2); }
-    .scene:active { transform: scale(.97); }
-    .scene .label { font-size: 1.05rem; font-weight: 600; }
-    .scene .meta { font-size: .72rem; color: var(--muted); }
-    .scene.active { border-color: var(--accent); background: linear-gradient(180deg, #0b3b52, #0c2c40); }
-    .scene.active .meta { color: var(--accent); }
-    .badge { align-self: flex-start; font-size: .65rem; letter-spacing: .04em; text-transform: uppercase;
-             padding: 3px 8px; border-radius: 999px; background: rgba(56,189,248,.15); color: var(--accent); display: none; }
-    .scene.active .badge { display: inline-block; }
+    .empty { margin-top: 28px; text-align: center; color: var(--muted); font-size: .9rem; }
 
-    .bar { margin-top: 18px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--border);
-           border-radius: 12px; font-size: .82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
-    .bar b { color: var(--text); font-weight: 600; }
+    .card-user { margin-top: 14px; background: var(--panel); border: 1px solid var(--border);
+                 border-radius: 14px; padding: 14px 16px; transition: opacity .2s; }
+    .card-user.off { opacity: .55; }
+    .u-head { display: flex; align-items: center; gap: 12px; }
+    .u-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; background: var(--muted); }
+    .u-dot.on { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
+    .u-dot.off { background: var(--bad); }
+    .u-id { flex: 1; min-width: 0; }
+    .u-name { font-weight: 650; font-size: 1rem; }
+    .u-sub { color: var(--muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .u-input { text-align: right; font-size: .68rem; color: var(--muted); line-height: 1.25; }
+    .u-input b { color: var(--accent); font-size: 1.05rem; }
+    .u-x { background: transparent; border: 0; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+    .u-x:hover { color: var(--bad); background: rgba(239,68,68,.1); }
+
+    .s-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .s-btn { appearance: none; cursor: pointer; background: var(--panel-2); color: var(--text);
+             border: 2px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: .85rem;
+             transition: transform .06s, border-color .15s, background .15s; }
+    .s-btn:hover { background: #324155; }
+    .s-btn:active { transform: scale(.96); }
+    .s-btn.active { border-color: var(--accent); background: linear-gradient(180deg, #0b3b52, #0c2c40); color: var(--accent); }
 
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
              background: #0b1220; border: 1px solid var(--border); color: var(--text); padding: 10px 16px;
@@ -66,7 +69,7 @@
     <header>
       <div>
         <h1>Scene Control</h1>
-        <div class="sub">ImmersiveSmilePlus VR &middot; Firebase remote selector</div>
+        <div class="sub">ImmersiveSmilePlus VR &middot; per-user remote selector</div>
       </div>
       <div class="status"><span id="dot" class="dot"></span><span id="statusText">connecting…</span></div>
     </header>
@@ -76,23 +79,15 @@
       <code>YOUR_PROJECT-default-rtdb.firebaseio.com</code> in the <code>DB_URL</code> constant.
     </div>
 
-    <div id="grid" class="grid"></div>
-
-    <div class="bar">
-      <span>Active: <b id="activeLabel">—</b></span>
-      <span>Updated: <b id="updatedAt">—</b></span>
-      <span>BLE input: <b id="bleInput">—</b></span>
-    </div>
+    <div id="users"></div>
+    <div id="empty" class="empty" style="display:none">No headsets connected yet. Launch the app on a device.</div>
   </div>
 
   <div id="toast" class="toast"></div>
 
   <script>
     // ── CONFIG ──────────────────────────────────────────────────────────────
-    // Paste your Firebase Realtime Database URL here (no trailing slash).
-    // Find it in Firebase Console ▸ Realtime Database (top of the data view).
     const DB_URL = "https://immersivesmile-test-default-rtdb.asia-southeast1.firebasedatabase.app/";
-    const SCENE_PATH = "/scene"; // node where the selected scene is stored
 
     // Must match SceneSelector.cs Scene Mappings and Unity Build Settings.
     const SCENES = [
@@ -102,23 +97,28 @@
       { id: 3, name: "Scene_R1",               label: "Scene R1" },
       { id: 4, name: "Scene_3_farm",           label: "Farm" },
     ];
+    const OFFLINE_MS = 8000; // a user is "offline" if no update seen within this window
     // ────────────────────────────────────────────────────────────────────────
 
-    const sceneUrl = DB_URL.replace(/\/$/, "") + SCENE_PATH + ".json";
-    const inputUrl = DB_URL.replace(/\/$/, "") + "/input.json"; // BLE value uploaded by Unity
+    const base = DB_URL.replace(/\/$/, "");
+    const usersUrl = base + "/users.json";
     const configured = !DB_URL.includes("YOUR_PROJECT");
 
-    const grid = document.getElementById("grid");
+    const usersEl = document.getElementById("users");
+    const emptyEl = document.getElementById("empty");
     const dot = document.getElementById("dot");
     const statusText = document.getElementById("statusText");
-    const activeLabel = document.getElementById("activeLabel");
-    const updatedAtEl = document.getElementById("updatedAt");
-    const bleInputEl = document.getElementById("bleInput");
     const toastEl = document.getElementById("toast");
     const banner = document.getElementById("banner");
 
-    let activeId = null;
+    let state = {};                 // mirror of /users
+    const lastSeenLocal = {};       // userId -> Date.now() of last observed update
     let pollTimer = null;
+
+    const sceneById = (id) => SCENES.find((s) => s.id === id);
+    const num = (x) => (typeof x === "number" ? x : 0);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+    const fmt = (v) => (Number.isFinite(+v) ? (+v).toFixed(1).replace(/\.0$/, "") : "0");
 
     function toast(msg, isErr) {
       toastEl.textContent = msg;
@@ -127,66 +127,118 @@
       toast._t = setTimeout(() => (toastEl.className = "toast"), 2200);
     }
     function setStatus(cls, text) { dot.className = "dot " + cls; statusText.textContent = text; }
-    const sceneById = (id) => SCENES.find((s) => s.id === id);
 
-    function renderScenes() {
-      grid.innerHTML = "";
-      for (const s of SCENES) {
-        const btn = document.createElement("button");
-        btn.className = "scene" + (s.id === activeId ? " active" : "");
-        btn.dataset.id = s.id;
-        btn.innerHTML =
-          '<span class="badge">On screen</span>' +
-          '<span class="label">' + s.label + "</span>" +
-          '<span class="meta">id ' + s.id + " &middot; " + s.name + "</span>";
-        btn.addEventListener("click", () => selectScene(s.id));
-        grid.appendChild(btn);
+    // ── Apply Firebase stream events to the local mirror ──────────────────────
+    function touch(parts) {
+      if (parts.length >= 1) lastSeenLocal[parts[0]] = Date.now();
+      else for (const id of Object.keys(state)) lastSeenLocal[id] = Date.now();
+    }
+    function nodeAt(parts, create) {
+      let obj = state;
+      for (const p of parts) {
+        if (typeof obj[p] !== "object" || obj[p] === null) { if (!create) return null; obj[p] = {}; }
+        obj = obj[p];
       }
+      return obj;
+    }
+    function applyPut(env) {
+      const parts = (env.path || "/").split("/").filter(Boolean);
+      if (parts.length === 0) {
+        state = (env.data && typeof env.data === "object") ? env.data : {};
+      } else {
+        const parent = nodeAt(parts.slice(0, -1), true);
+        const leaf = parts[parts.length - 1];
+        if (env.data === null || env.data === undefined) delete parent[leaf];
+        else parent[leaf] = env.data;
+      }
+      touch(parts);
+    }
+    function applyPatch(env) {
+      const parts = (env.path || "/").split("/").filter(Boolean);
+      const node = nodeAt(parts, true);
+      if (env.data && typeof env.data === "object") Object.assign(node, env.data);
+      touch(parts);
     }
 
-    function setActive(payload) {
-      if (!payload || typeof payload.id !== "number") return;
-      activeId = payload.id;
-      const s = sceneById(payload.id);
-      activeLabel.textContent = (payload.label || (s && s.label) || "?") + " (id " + payload.id + ")";
-      updatedAtEl.textContent = payload.updatedAt ? new Date(payload.updatedAt).toLocaleTimeString() : "—";
-      document.querySelectorAll(".scene").forEach((el) =>
-        el.classList.toggle("active", Number(el.dataset.id) === activeId)
-      );
+    // ── Render ────────────────────────────────────────────────────────────────
+    function render() {
+      const ids = Object.keys(state).filter((id) => state[id] && typeof state[id] === "object");
+      ids.sort((a, b) => num(state[a].connectedAt) - num(state[b].connectedAt));
+      emptyEl.style.display = ids.length ? "none" : "block";
+      usersEl.innerHTML = "";
+      ids.forEach((id, i) => usersEl.appendChild(card(id, i + 1)));
     }
 
-    async function selectScene(id) {
-      if (!configured) return toast("Set DB_URL first", true);
-      const s = sceneById(id);
-      const payload = { id: s.id, name: s.name, label: s.label, updatedAt: new Date().toISOString() };
+    function card(id, n) {
+      const u = state[id] || {};
+      const online = Date.now() - (lastSeenLocal[id] || 0) < OFFLINE_MS;
+      const sceneId = u.scene && typeof u.scene.id === "number" ? u.scene.id : null;
+
+      const el = document.createElement("div");
+      el.className = "card-user" + (online ? "" : " off");
+
+      const head = document.createElement("div");
+      head.className = "u-head";
+      head.innerHTML =
+        '<span class="u-dot ' + (online ? "on" : "off") + '"></span>' +
+        '<div class="u-id"><div class="u-name">User ' + n + '</div>' +
+        '<div class="u-sub">' + esc(u.name || "device") + ' &middot; ' + esc(id.slice(0, 6)) + '</div></div>' +
+        '<div class="u-input">BLE input<br><b>' + fmt(u.input) + '</b></div>' +
+        '<button class="u-x" title="Remove user">✕</button>';
+      head.querySelector(".u-x").addEventListener("click", () => removeUser(id));
+      el.appendChild(head);
+
+      const row = document.createElement("div");
+      row.className = "s-row";
+      for (const s of SCENES) {
+        const b = document.createElement("button");
+        b.className = "s-btn" + (s.id === sceneId ? " active" : "");
+        b.textContent = s.label;
+        b.addEventListener("click", () => setUserScene(id, s));
+        row.appendChild(b);
+      }
+      el.appendChild(row);
+      return el;
+    }
+
+    // ── Actions ────────────────────────────────────────────────────────────────
+    async function setUserScene(id, s) {
       try {
-        const res = await fetch(sceneUrl, {
+        const res = await fetch(base + "/users/" + id + "/scene.json", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ id: s.id, name: s.name, label: s.label, updatedAt: new Date().toISOString() }),
         });
-        if (!res.ok) return toast("Write failed: " + res.status, true);
-        setActive(payload); // optimistic; the stream confirms it to all clients
+        if (!res.ok) return toast("Failed: " + res.status, true);
+        (nodeAt([id], true)).scene = { id: s.id }; // optimistic; stream confirms
+        render();
         toast("→ " + s.label);
-      } catch (e) {
+      } catch {
         toast("Network error", true);
       }
     }
 
-    // Live updates via Firebase RTDB's SSE stream; falls back to polling.
+    async function removeUser(id) {
+      try {
+        await fetch(base + "/users/" + id + ".json", { method: "DELETE" });
+        delete state[id];
+        render();
+      } catch {
+        toast("Couldn't remove", true);
+      }
+    }
+
+    // ── Stream + polling fallback ───────────────────────────────────────────────
     function connect() {
       try {
-        const es = new EventSource(sceneUrl);
-        const onEvent = (e) => {
+        const es = new EventSource(usersUrl);
+        const handle = (apply) => (e) => {
           stopPolling();
           setStatus("live", "live");
-          try {
-            const env = JSON.parse(e.data); // { path, data }
-            if (env && env.path === "/" && env.data) setActive(env.data);
-          } catch { /* keep-alive / null */ }
+          try { apply(JSON.parse(e.data)); render(); } catch { /* keep-alive / null */ }
         };
-        es.addEventListener("put", onEvent);
-        es.addEventListener("patch", onEvent);
+        es.addEventListener("put", handle(applyPut));
+        es.addEventListener("patch", handle(applyPatch));
         es.onopen = () => setStatus("live", "live");
         es.onerror = () => { setStatus("poll", "polling…"); startPolling(); };
       } catch {
@@ -194,46 +246,24 @@
       }
     }
 
-    // Stream the BLE value Unity uploads to /input — display only.
-    function connectInput() {
+    async function pollUsers() {
       try {
-        const es = new EventSource(inputUrl);
-        const on = (e) => {
-          try {
-            const env = JSON.parse(e.data);
-            if (env && env.path === "/")
-              bleInputEl.textContent = (env.data === null || env.data === undefined) ? "0" : env.data;
-          } catch { /* keep-alive */ }
-        };
-        es.addEventListener("put", on);
-        es.addEventListener("patch", on);
-      } catch { /* ignore */ }
-    }
-
-    async function pollOnce() {
-      try {
-        const data = await (await fetch(sceneUrl)).json();
-        if (data) setActive(data);
-        setStatus(dot.classList.contains("live") ? "live" : "poll", dot.classList.contains("live") ? "live" : "polling");
+        const data = await (await fetch(usersUrl)).json();
+        state = data || {};
+        for (const id of Object.keys(state)) lastSeenLocal[id] = Date.now();
+        render();
       } catch {
         setStatus("down", "unreachable");
       }
     }
-    function startPolling() { if (!pollTimer) pollTimer = setInterval(pollOnce, 3000); }
+    function startPolling() { if (!pollTimer) pollTimer = setInterval(pollUsers, 3000); }
     function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
-    async function init() {
+    function init() {
       banner.classList.toggle("show", !configured);
-      renderScenes();
       if (!configured) { setStatus("down", "not configured"); return; }
-      // Seed the node with a default if it's empty, so instances have a scene to load.
-      try {
-        const cur = await (await fetch(sceneUrl)).json();
-        if (cur === null) await selectScene(0);
-        else setActive(cur);
-      } catch { /* ignore; stream/poll will catch up */ }
       connect();
-      connectInput();
+      setInterval(render, 2000); // refresh online/offline state over time
     }
 
     init();
