@@ -9,7 +9,7 @@
     :root {
       --bg: #0f172a; --panel: #1e293b; --panel-2: #273449;
       --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --accent-2: #0ea5e9;
-      --ok: #22c55e; --bad: #ef4444; --border: #334155;
+      --ok: #22c55e; --bad: #ef4444; --warn: #f59e0b; --border: #334155;
     }
     * { box-sizing: border-box; }
     body {
@@ -24,7 +24,13 @@
     .status { display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); white-space: nowrap; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: background .2s; }
     .dot.live { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
+    .dot.poll { background: var(--warn); }
     .dot.down { background: var(--bad); }
+
+    .banner { margin-top: 14px; padding: 12px 14px; border-radius: 12px; font-size: .85rem; display: none; }
+    .banner.show { display: block; }
+    .banner.err { background: rgba(239,68,68,.12); border: 1px solid var(--bad); color: #fecaca; }
+    .banner code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 5px; }
 
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
     .scene {
@@ -48,11 +54,6 @@
            border-radius: 12px; font-size: .82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
     .bar b { color: var(--text); font-weight: 600; }
 
-    .auth { margin-top: 14px; display: none; gap: 8px; }
-    .auth input { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-                  color: var(--text); padding: 10px 12px; font-size: .9rem; }
-    .auth button { background: var(--accent-2); color: #04222f; border: 0; border-radius: 10px; padding: 0 16px;
-                   font-weight: 600; cursor: pointer; }
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
              background: #0b1220; border: 1px solid var(--border); color: var(--text); padding: 10px 16px;
              border-radius: 10px; font-size: .85rem; opacity: 0; pointer-events: none; transition: all .2s; }
@@ -65,14 +66,14 @@
     <header>
       <div>
         <h1>Scene Control</h1>
-        <div class="sub">ImmersiveSmilePlus VR &middot; remote scene selector</div>
+        <div class="sub">ImmersiveSmilePlus VR &middot; Firebase remote selector</div>
       </div>
       <div class="status"><span id="dot" class="dot"></span><span id="statusText">connecting…</span></div>
     </header>
 
-    <div id="auth" class="auth">
-      <input id="token" type="password" placeholder="Admin token" autocomplete="off" />
-      <button id="saveToken">Save</button>
+    <div id="banner" class="banner err">
+      Set your database URL: open this file and replace
+      <code>YOUR_PROJECT-default-rtdb.firebaseio.com</code> in the <code>DB_URL</code> constant.
     </div>
 
     <div id="grid" class="grid"></div>
@@ -80,111 +81,142 @@
     <div class="bar">
       <span>Active: <b id="activeLabel">—</b></span>
       <span>Updated: <b id="updatedAt">—</b></span>
-      <span>Viewers: <b id="viewers">—</b></span>
     </div>
   </div>
 
   <div id="toast" class="toast"></div>
 
   <script>
-    const grid = document.getElementById('grid');
-    const dot = document.getElementById('dot');
-    const statusText = document.getElementById('statusText');
-    const activeLabel = document.getElementById('activeLabel');
-    const updatedAtEl = document.getElementById('updatedAt');
-    const viewersEl = document.getElementById('viewers');
-    const toastEl = document.getElementById('toast');
-    const authBox = document.getElementById('auth');
-    const tokenInput = document.getElementById('token');
+    // ── CONFIG ──────────────────────────────────────────────────────────────
+    // Paste your Firebase Realtime Database URL here (no trailing slash).
+    // Find it in Firebase Console ▸ Realtime Database (top of the data view).
+    const DB_URL = "https://YOUR_PROJECT-default-rtdb.firebaseio.com";
+    const SCENE_PATH = "/scene"; // node where the selected scene is stored
 
-    let scenes = [];
+    // Must match SceneSelector.cs Scene Mappings and Unity Build Settings.
+    const SCENES = [
+      { id: 0, name: "MainScene",              label: "Main Menu" },
+      { id: 1, name: "Scene_1_Car_dealership", label: "Car Dealership" },
+      { id: 2, name: "Scene_2_Castle",         label: "Castle" },
+      { id: 3, name: "Scene_R1",               label: "Scene R1" },
+      { id: 4, name: "Scene_3_farm",           label: "Farm" },
+    ];
+    // ────────────────────────────────────────────────────────────────────────
+
+    const sceneUrl = DB_URL.replace(/\/$/, "") + SCENE_PATH + ".json";
+    const configured = !DB_URL.includes("YOUR_PROJECT");
+
+    const grid = document.getElementById("grid");
+    const dot = document.getElementById("dot");
+    const statusText = document.getElementById("statusText");
+    const activeLabel = document.getElementById("activeLabel");
+    const updatedAtEl = document.getElementById("updatedAt");
+    const toastEl = document.getElementById("toast");
+    const banner = document.getElementById("banner");
+
     let activeId = null;
-    let token = localStorage.getItem('adminToken') || '';
-    tokenInput.value = token;
+    let pollTimer = null;
 
     function toast(msg, isErr) {
       toastEl.textContent = msg;
-      toastEl.className = 'toast show' + (isErr ? ' err' : '');
+      toastEl.className = "toast show" + (isErr ? " err" : "");
       clearTimeout(toast._t);
-      toast._t = setTimeout(() => (toastEl.className = 'toast'), 2200);
+      toast._t = setTimeout(() => (toastEl.className = "toast"), 2200);
     }
+    function setStatus(cls, text) { dot.className = "dot " + cls; statusText.textContent = text; }
+    const sceneById = (id) => SCENES.find((s) => s.id === id);
 
     function renderScenes() {
-      grid.innerHTML = '';
-      for (const s of scenes) {
-        const btn = document.createElement('button');
-        btn.className = 'scene' + (s.id === activeId ? ' active' : '');
+      grid.innerHTML = "";
+      for (const s of SCENES) {
+        const btn = document.createElement("button");
+        btn.className = "scene" + (s.id === activeId ? " active" : "");
         btn.dataset.id = s.id;
         btn.innerHTML =
           '<span class="badge">On screen</span>' +
-          '<span class="label">' + s.label + '</span>' +
-          '<span class="meta">id ' + s.id + ' &middot; ' + s.name + '</span>';
-        btn.addEventListener('click', () => selectScene(s.id));
+          '<span class="label">' + s.label + "</span>" +
+          '<span class="meta">id ' + s.id + " &middot; " + s.name + "</span>";
+        btn.addEventListener("click", () => selectScene(s.id));
         grid.appendChild(btn);
       }
     }
 
     function setActive(payload) {
+      if (!payload || typeof payload.id !== "number") return;
       activeId = payload.id;
-      activeLabel.textContent = payload.label + ' (id ' + payload.id + ')';
-      updatedAtEl.textContent = new Date(payload.updatedAt).toLocaleTimeString();
-      document.querySelectorAll('.scene').forEach((el) =>
-        el.classList.toggle('active', Number(el.dataset.id) === activeId)
+      const s = sceneById(payload.id);
+      activeLabel.textContent = (payload.label || (s && s.label) || "?") + " (id " + payload.id + ")";
+      updatedAtEl.textContent = payload.updatedAt ? new Date(payload.updatedAt).toLocaleTimeString() : "—";
+      document.querySelectorAll(".scene").forEach((el) =>
+        el.classList.toggle("active", Number(el.dataset.id) === activeId)
       );
     }
 
     async function selectScene(id) {
+      if (!configured) return toast("Set DB_URL first", true);
+      const s = sceneById(id);
+      const payload = { id: s.id, name: s.name, label: s.label, updatedAt: new Date().toISOString() };
       try {
-        const res = await fetch('/api/scene', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Admin-Token': token } : {}) },
-          body: JSON.stringify({ id }),
+        const res = await fetch(sceneUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
-        if (res.status === 401) { authBox.style.display = 'flex'; return toast('Token required / invalid', true); }
-        if (!res.ok) return toast('Failed: ' + res.status, true);
-        const payload = await res.json();
-        setActive(payload); // optimistic; SSE will confirm to all clients
-        toast('→ ' + payload.label);
+        if (!res.ok) return toast("Write failed: " + res.status, true);
+        setActive(payload); // optimistic; the stream confirms it to all clients
+        toast("→ " + s.label);
       } catch (e) {
-        toast('Network error', true);
+        toast("Network error", true);
       }
     }
 
-    function connectSSE() {
-      const es = new EventSource('/api/events');
-      es.addEventListener('scene', (e) => setActive(JSON.parse(e.data)));
-      es.onopen = () => { dot.className = 'dot live'; statusText.textContent = 'live'; refreshViewers(); };
-      es.onerror = () => { dot.className = 'dot down'; statusText.textContent = 'reconnecting…'; };
-    }
-
-    async function refreshViewers() {
+    // Live updates via Firebase RTDB's SSE stream; falls back to polling.
+    function connect() {
       try {
-        const h = await (await fetch('/health')).json();
-        viewersEl.textContent = h.clients;
-      } catch { /* ignore */ }
-    }
-
-    document.getElementById('saveToken').addEventListener('click', () => {
-      token = tokenInput.value.trim();
-      localStorage.setItem('adminToken', token);
-      toast('Token saved');
-    });
-
-    (async function init() {
-      try {
-        const cfg = await (await fetch('/api/config')).json();
-        if (cfg.authRequired) authBox.style.display = 'flex';
-        scenes = await (await fetch('/api/scenes')).json();
-        renderScenes();
-        const st = await (await fetch('/api/state')).json();
-        setActive(st);
-        connectSSE();
-        setInterval(refreshViewers, 10000);
-      } catch (e) {
-        statusText.textContent = 'server unreachable';
-        dot.className = 'dot down';
+        const es = new EventSource(sceneUrl);
+        const onEvent = (e) => {
+          stopPolling();
+          setStatus("live", "live");
+          try {
+            const env = JSON.parse(e.data); // { path, data }
+            if (env && env.path === "/" && env.data) setActive(env.data);
+          } catch { /* keep-alive / null */ }
+        };
+        es.addEventListener("put", onEvent);
+        es.addEventListener("patch", onEvent);
+        es.onopen = () => setStatus("live", "live");
+        es.onerror = () => { setStatus("poll", "polling…"); startPolling(); };
+      } catch {
+        startPolling();
       }
-    })();
+    }
+
+    async function pollOnce() {
+      try {
+        const data = await (await fetch(sceneUrl)).json();
+        if (data) setActive(data);
+        setStatus(dot.classList.contains("live") ? "live" : "poll", dot.classList.contains("live") ? "live" : "polling");
+      } catch {
+        setStatus("down", "unreachable");
+      }
+    }
+    function startPolling() { if (!pollTimer) pollTimer = setInterval(pollOnce, 3000); }
+    function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+    async function init() {
+      banner.classList.toggle("show", !configured);
+      renderScenes();
+      if (!configured) { setStatus("down", "not configured"); return; }
+      // Seed the node with a default if it's empty, so instances have a scene to load.
+      try {
+        const cur = await (await fetch(sceneUrl)).json();
+        if (cur === null) await selectScene(0);
+        else setActive(cur);
+      } catch { /* ignore; stream/poll will catch up */ }
+      connect();
+    }
+
+    init();
   </script>
 </body>
 </html>

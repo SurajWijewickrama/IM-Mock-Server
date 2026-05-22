@@ -1,4 +1,5 @@
 node_modules/
-npm-debug.log*
-state.json
+.firebase/
+firebase-debug.log
+*.log
 .env
