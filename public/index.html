@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Scene Control — ImmersiveSmilePlus VR</title>
+  <style>
+    :root {
+      --bg: #0f172a; --panel: #1e293b; --panel-2: #273449;
+      --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --accent-2: #0ea5e9;
+      --ok: #22c55e; --bad: #ef4444; --border: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 0 8px; }
+    h1 { font-size: 1.15rem; margin: 0; font-weight: 650; }
+    .sub { color: var(--muted); font-size: .8rem; margin-top: 2px; }
+    .status { display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); white-space: nowrap; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: background .2s; }
+    .dot.live { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
+    .dot.down { background: var(--bad); }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
+    .scene {
+      appearance: none; cursor: pointer; text-align: left;
+      background: var(--panel); color: var(--text); border: 2px solid var(--border);
+      border-radius: 14px; padding: 16px; min-height: 92px;
+      display: flex; flex-direction: column; justify-content: space-between; gap: 8px;
+      transition: transform .06s ease, border-color .15s, background .15s;
+    }
+    .scene:hover { background: var(--panel-2); }
+    .scene:active { transform: scale(.97); }
+    .scene .label { font-size: 1.05rem; font-weight: 600; }
+    .scene .meta { font-size: .72rem; color: var(--muted); }
+    .scene.active { border-color: var(--accent); background: linear-gradient(180deg, #0b3b52, #0c2c40); }
+    .scene.active .meta { color: var(--accent); }
+    .badge { align-self: flex-start; font-size: .65rem; letter-spacing: .04em; text-transform: uppercase;
+             padding: 3px 8px; border-radius: 999px; background: rgba(56,189,248,.15); color: var(--accent); display: none; }
+    .scene.active .badge { display: inline-block; }
+
+    .bar { margin-top: 18px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--border);
+           border-radius: 12px; font-size: .82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+    .bar b { color: var(--text); font-weight: 600; }
+
+    .auth { margin-top: 14px; display: none; gap: 8px; }
+    .auth input { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+                  color: var(--text); padding: 10px 12px; font-size: .9rem; }
+    .auth button { background: var(--accent-2); color: #04222f; border: 0; border-radius: 10px; padding: 0 16px;
+                   font-weight: 600; cursor: pointer; }
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+             background: #0b1220; border: 1px solid var(--border); color: var(--text); padding: 10px 16px;
+             border-radius: 10px; font-size: .85rem; opacity: 0; pointer-events: none; transition: all .2s; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.err { border-color: var(--bad); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Scene Control</h1>
+        <div class="sub">ImmersiveSmilePlus VR &middot; remote scene selector</div>
+      </div>
+      <div class="status"><span id="dot" class="dot"></span><span id="statusText">connecting…</span></div>
+    </header>
+
+    <div id="auth" class="auth">
+      <input id="token" type="password" placeholder="Admin token" autocomplete="off" />
+      <button id="saveToken">Save</button>
+    </div>
+
+    <div id="grid" class="grid"></div>
+
+    <div class="bar">
+      <span>Active: <b id="activeLabel">—</b></span>
+      <span>Updated: <b id="updatedAt">—</b></span>
+      <span>Viewers: <b id="viewers">—</b></span>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const grid = document.getElementById('grid');
+    const dot = document.getElementById('dot');
+    const statusText = document.getElementById('statusText');
+    const activeLabel = document.getElementById('activeLabel');
+    const updatedAtEl = document.getElementById('updatedAt');
+    const viewersEl = document.getElementById('viewers');
+    const toastEl = document.getElementById('toast');
+    const authBox = document.getElementById('auth');
+    const tokenInput = document.getElementById('token');
+
+    let scenes = [];
+    let activeId = null;
+    let token = localStorage.getItem('adminToken') || '';
+    tokenInput.value = token;
+
+    function toast(msg, isErr) {
+      toastEl.textContent = msg;
+      toastEl.className = 'toast show' + (isErr ? ' err' : '');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => (toastEl.className = 'toast'), 2200);
+    }
+
+    function renderScenes() {
+      grid.innerHTML = '';
+      for (const s of scenes) {
+        const btn = document.createElement('button');
+        btn.className = 'scene' + (s.id === activeId ? ' active' : '');
+        btn.dataset.id = s.id;
+        btn.innerHTML =
+          '<span class="badge">On screen</span>' +
+          '<span class="label">' + s.label + '</span>' +
+          '<span class="meta">id ' + s.id + ' &middot; ' + s.name + '</span>';
+        btn.addEventListener('click', () => selectScene(s.id));
+        grid.appendChild(btn);
+      }
+    }
+
+    function setActive(payload) {
+      activeId = payload.id;
+      activeLabel.textContent = payload.label + ' (id ' + payload.id + ')';
+      updatedAtEl.textContent = new Date(payload.updatedAt).toLocaleTimeString();
+      document.querySelectorAll('.scene').forEach((el) =>
+        el.classList.toggle('active', Number(el.dataset.id) === activeId)
+      );
+    }
+
+    async function selectScene(id) {
+      try {
+        const res = await fetch('/api/scene', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Admin-Token': token } : {}) },
+          body: JSON.stringify({ id }),
+        });
+        if (res.status === 401) { authBox.style.display = 'flex'; return toast('Token required / invalid', true); }
+        if (!res.ok) return toast('Failed: ' + res.status, true);
+        const payload = await res.json();
+        setActive(payload); // optimistic; SSE will confirm to all clients
+        toast('→ ' + payload.label);
+      } catch (e) {
+        toast('Network error', true);
+      }
+    }
+
+    function connectSSE() {
+      const es = new EventSource('/api/events');
+      es.addEventListener('scene', (e) => setActive(JSON.parse(e.data)));
+      es.onopen = () => { dot.className = 'dot live'; statusText.textContent = 'live'; refreshViewers(); };
+      es.onerror = () => { dot.className = 'dot down'; statusText.textContent = 'reconnecting…'; };
+    }
+
+    async function refreshViewers() {
+      try {
+        const h = await (await fetch('/health')).json();
+        viewersEl.textContent = h.clients;
+      } catch { /* ignore */ }
+    }
+
+    document.getElementById('saveToken').addEventListener('click', () => {
+      token = tokenInput.value.trim();
+      localStorage.setItem('adminToken', token);
+      toast('Token saved');
+    });
+
+    (async function init() {
+      try {
+        const cfg = await (await fetch('/api/config')).json();
+        if (cfg.authRequired) authBox.style.display = 'flex';
+        scenes = await (await fetch('/api/scenes')).json();
+        renderScenes();
+        const st = await (await fetch('/api/state')).json();
+        setActive(st);
+        connectSSE();
+        setInterval(refreshViewers, 10000);
+      } catch (e) {
+        statusText.textContent = 'server unreachable';
+        dot.className = 'dot down';
+      }
+    })();
+  </script>
+</body>
+</html>
