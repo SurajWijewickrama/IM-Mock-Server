@@ -1,9 +1,12 @@
 {
-  "_comment": "TESTING rules: anyone with the URL can read/write /scene. Fine for a demo. For real use, lock '.write' behind auth. The /scene node only ever holds {id,name,label,updatedAt}.",
   "rules": {
     ".read": false,
     ".write": false,
     "scene": {
+      ".read": true,
+      ".write": true
+    },
+    "input": {
       ".read": true,
       ".write": true
     }

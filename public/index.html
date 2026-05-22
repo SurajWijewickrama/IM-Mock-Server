@@ -81,6 +81,7 @@
     <div class="bar">
       <span>Active: <b id="activeLabel">—</b></span>
       <span>Updated: <b id="updatedAt">—</b></span>
+      <span>BLE input: <b id="bleInput">—</b></span>
     </div>
   </div>
 
@@ -104,6 +105,7 @@
     // ────────────────────────────────────────────────────────────────────────
 
     const sceneUrl = DB_URL.replace(/\/$/, "") + SCENE_PATH + ".json";
+    const inputUrl = DB_URL.replace(/\/$/, "") + "/input.json"; // BLE value uploaded by Unity
     const configured = !DB_URL.includes("YOUR_PROJECT");
 
     const grid = document.getElementById("grid");
@@ -111,6 +113,7 @@
     const statusText = document.getElementById("statusText");
     const activeLabel = document.getElementById("activeLabel");
     const updatedAtEl = document.getElementById("updatedAt");
+    const bleInputEl = document.getElementById("bleInput");
     const toastEl = document.getElementById("toast");
     const banner = document.getElementById("banner");
 
@@ -191,6 +194,22 @@
       }
     }
 
+    // Stream the BLE value Unity uploads to /input — display only.
+    function connectInput() {
+      try {
+        const es = new EventSource(inputUrl);
+        const on = (e) => {
+          try {
+            const env = JSON.parse(e.data);
+            if (env && env.path === "/")
+              bleInputEl.textContent = (env.data === null || env.data === undefined) ? "0" : env.data;
+          } catch { /* keep-alive */ }
+        };
+        es.addEventListener("put", on);
+        es.addEventListener("patch", on);
+      } catch { /* ignore */ }
+    }
+
     async function pollOnce() {
       try {
         const data = await (await fetch(sceneUrl)).json();
@@ -214,6 +233,7 @@
         else setActive(cur);
       } catch { /* ignore; stream/poll will catch up */ }
       connect();
+      connectInput();
     }
 
     init();
