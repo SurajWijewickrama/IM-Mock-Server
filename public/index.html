@@ -57,6 +57,24 @@
     .s-btn:active { transform: scale(.96); }
     .s-btn.active { border-color: var(--accent); background: linear-gradient(180deg, #0b3b52, #0c2c40); color: var(--accent); }
 
+    .seg { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+           padding-top: 12px; border-top: 1px solid var(--border); }
+    .seg-label { font-size: .72rem; color: var(--muted); flex: 1; }
+    .seg-label b { color: var(--text); font-weight: 600; }
+    .seg-btn { appearance: none; cursor: pointer; background: var(--panel-2); color: var(--text);
+               border: 2px solid var(--border); border-radius: 8px; padding: 6px 10px;
+               font-size: .78rem; line-height: 1; min-width: 62px;
+               transition: transform .06s, border-color .15s, background .15s; }
+    .seg-btn:hover { background: #324155; }
+    .seg-btn:active { transform: scale(.96); }
+    .seg-btn.active { border-color: var(--accent); background: linear-gradient(180deg, #0b3b52, #0c2c40); color: var(--accent); }
+
+    .stop-btn { margin-left: 6px; border-color: #5b3535; color: #fecaca; }
+    .stop-btn:hover { background: rgba(239,68,68,.14); }
+    .stop-btn.stopped { border-color: var(--bad); background: rgba(239,68,68,.16); color: #fecaca; }
+    .card-user.ended { border-color: #5b3535; }
+    .ended-note { margin-top: 8px; font-size: .72rem; color: var(--bad); }
+
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
              background: #0b1220; border: 1px solid var(--border); color: var(--text); padding: 10px 16px;
              border-radius: 10px; font-size: .85rem; opacity: 0; pointer-events: none; transition: all .2s; }
@@ -97,6 +115,16 @@
       { id: 3, name: "Scene_R1",               label: "Scene R1" },
       { id: 4, name: "Scene_3_farm",           label: "Farm" },
     ];
+    // How much of a scene plays before it loops. Each segment is ~30s of authored
+    // content; a scene that has fewer simply clamps (SceneSelector -> ISegmentedLoop).
+    // Must match SceneSelector.cs maxSegments.
+    const SEGMENTS = [
+      { n: 1, label: "30s" },
+      { n: 2, label: "1 min" },
+      { n: 3, label: "1:30" },
+    ];
+    const DEFAULT_SEGMENTS = 1;
+
     const OFFLINE_MS = 8000; // a user is "offline" if no update seen within this window
     // ────────────────────────────────────────────────────────────────────────
 
@@ -173,9 +201,11 @@
       const u = state[id] || {};
       const online = Date.now() - (lastSeenLocal[id] || 0) < OFFLINE_MS;
       const sceneId = u.scene && typeof u.scene.id === "number" ? u.scene.id : null;
+      const segs = segmentsOf(u);
+      const stopped = stopOf(u);
 
       const el = document.createElement("div");
-      el.className = "card-user" + (online ? "" : " off");
+      el.className = "card-user" + (online ? "" : " off") + (stopped ? " ended" : "");
 
       const head = document.createElement("div");
       head.className = "u-head";
@@ -198,21 +228,102 @@
         row.appendChild(b);
       }
       el.appendChild(row);
+
+      const seg = document.createElement("div");
+      seg.className = "seg";
+      const lab = document.createElement("div");
+      lab.className = "seg-label";
+      lab.innerHTML = "Loop length &middot; <b>" + segs + "</b> segment" + (segs === 1 ? "" : "s");
+      seg.appendChild(lab);
+      for (const s of SEGMENTS) {
+        const b = document.createElement("button");
+        b.className = "seg-btn" + (s.n === segs ? " active" : "");
+        b.textContent = s.label;
+        b.title = s.n + " x 30s segment" + (s.n === 1 ? "" : "s");
+        b.addEventListener("click", () => setUserSegments(id, s.n));
+        seg.appendChild(b);
+      }
+
+      const stopBtn = document.createElement("button");
+      stopBtn.className = "seg-btn stop-btn" + (stopped ? " stopped" : "");
+      stopBtn.textContent = stopped ? "Resume" : "End";
+      stopBtn.title = stopped
+        ? "Start the loop again from the top"
+        : "Say goodbye, then hand the room back (passthrough)";
+      stopBtn.addEventListener("click", () => setUserStop(id, !stopped));
+      seg.appendChild(stopBtn);
+
+      el.appendChild(seg);
+
+      if (stopped) {
+        const note = document.createElement("div");
+        note.className = "ended-note";
+        note.textContent = "Session ended — farewell played, passthrough on.";
+        el.appendChild(note);
+      }
+
       return el;
     }
 
     // ── Actions ────────────────────────────────────────────────────────────────
+    const segmentsOf = (u) => {
+      const n = u && u.scene ? u.scene.segments : null;
+      return Number.isFinite(+n) && +n >= 1 ? Math.min(+n, SEGMENTS.length) : DEFAULT_SEGMENTS;
+    };
+
+    const stopOf = (u) => !!(u && u.scene && u.scene.stop === true);
+
+    // PUT replaces the whole scene node, so the current segment count has to be
+    // carried across or switching scene would silently reset the loop length.
+    // stop is deliberately cleared instead: picking a scene means "play this now".
     async function setUserScene(id, s) {
+      const segments = segmentsOf(state[id]);
       try {
         const res = await fetch(base + "/users/" + id + "/scene.json", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: s.id, name: s.name, label: s.label, updatedAt: new Date().toISOString() }),
+          body: JSON.stringify({ id: s.id, name: s.name, label: s.label, segments, stop: false, updatedAt: new Date().toISOString() }),
         });
         if (!res.ok) return toast("Failed: " + res.status, true);
-        (nodeAt([id], true)).scene = { id: s.id }; // optimistic; stream confirms
+        (nodeAt([id], true)).scene = { id: s.id, segments, stop: false }; // optimistic; stream confirms
         render();
         toast("→ " + s.label);
+      } catch {
+        toast("Network error", true);
+      }
+    }
+
+    // Ending is not a cut: the headset finishes the line being spoken, the farmer
+    // says goodbye, and only then does passthrough come up. Expect ~10s.
+    async function setUserStop(id, stop) {
+      try {
+        const res = await fetch(base + "/users/" + id + "/scene.json", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stop, updatedAt: new Date().toISOString() }),
+        });
+        if (!res.ok) return toast("Failed: " + res.status, true);
+        (nodeAt([id, "scene"], true)).stop = stop; // optimistic; stream confirms
+        render();
+        toast(stop ? "Ending — goodbye then passthrough" : "Resumed");
+      } catch {
+        toast("Network error", true);
+      }
+    }
+
+    // PATCH, so the scene selection underneath is left alone. The headset picks
+    // this up on its open stream and applies it at the end of the current lap.
+    async function setUserSegments(id, n) {
+      try {
+        const res = await fetch(base + "/users/" + id + "/scene.json", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ segments: n, updatedAt: new Date().toISOString() }),
+        });
+        if (!res.ok) return toast("Failed: " + res.status, true);
+        (nodeAt([id, "scene"], true)).segments = n; // optimistic; stream confirms
+        render();
+        toast(n + " segment" + (n === 1 ? "" : "s") + " · " + (SEGMENTS.find((s) => s.n === n) || {}).label);
       } catch {
         toast("Network error", true);
       }
