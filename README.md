@@ -29,3 +29,11 @@ Selecting a scene writes its ID/name to `/users/{userId}/scene`, retains the seg
 Additional asset-pack/demo/recovery scenes and scenes without an enabled build entry and remote mapping are intentionally not launch buttons. Register and enable a new Unity scene before adding its stable ID here.
 
 Validation: catalog matched all 17 enabled Unity scenes and runtime mappings; simulated clicks on all 17 buttons verified outgoing Firebase payloads and selected-state updates. No live Firebase writes or headset playback were exercised. Changes are local until the site's normal Firebase Hosting deployment runs.
+
+## Headset connection and scene commands
+
+The dashboard uses `lastSeen` heartbeats written by Unity to identify active headsets. Database snapshots and dashboard scene writes do not mark a device online. Devices without a heartbeat for 15 seconds appear under the collapsed offline list, with their controls disabled. Put on the headset and open the app to reconnect. Device names and full IDs distinguish saved records for the same Quest model.
+
+“Requested scene” means Firebase accepted the command; it is not a scene-loaded acknowledgement from Unity.
+
+Run the dashboard regression checks with `node tests/remote-control.test.cjs`.

@@ -36,7 +36,11 @@
 
     .card-user { margin-top: 14px; background: var(--panel); border: 1px solid var(--border);
                  border-radius: 14px; padding: 14px 16px; transition: opacity .2s; }
-    .card-user.off { opacity: .55; }
+    .card-user.off { opacity: .7; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .offline-list { margin-top: 24px; color: var(--muted); }
+    .offline-list summary { padding: 14px 0; cursor: pointer; }
+    .connection-note { margin-top: 10px; font-size: .8rem; color: var(--warn); }
     .u-head { display: flex; align-items: center; gap: 12px; }
     .u-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; background: var(--muted); }
     .u-dot.on { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
@@ -143,7 +147,7 @@
     ];
     const DEFAULT_SEGMENTS = 1;
 
-    const OFFLINE_MS = 8000; // a user is "offline" if no update seen within this window
+    const OFFLINE_MS = 15000; // a user is "offline" if no update seen within this window
     // ────────────────────────────────────────────────────────────────────────
 
     const base = DB_URL.replace(/\/$/, "");
@@ -158,7 +162,6 @@
     const banner = document.getElementById("banner");
 
     let state = {};                 // mirror of /users
-    const lastSeenLocal = {};       // userId -> Date.now() of last observed update
     let pollTimer = null;
 
     const sceneById = (id) => SCENES.find((s) => s.id === id);
@@ -175,9 +178,25 @@
     function setStatus(cls, text) { dot.className = "dot " + cls; statusText.textContent = text; }
 
     // ── Apply Firebase stream events to the local mirror ──────────────────────
-    function touch(parts) {
-      if (parts.length >= 1) lastSeenLocal[parts[0]] = Date.now();
-      else for (const id of Object.keys(state)) lastSeenLocal[id] = Date.now();
+    // Only a headset heartbeat proves presence. Scene writes and snapshots do not.
+    function heartbeatAge(u) {
+      const timestamp = typeof u?.lastSeen === "number" ? u.lastSeen : Date.parse(u?.lastSeen);
+      return Number.isFinite(timestamp) ? Math.max(0, Date.now() - timestamp) : Infinity;
+    }
+    function isOnline(id) { return heartbeatAge(state[id]) < OFFLINE_MS; }
+    function lastSeenLabel(u) {
+      const age = heartbeatAge(u);
+      if (!Number.isFinite(age)) return "No heartbeat received";
+      if (age < OFFLINE_MS) return "Connected · heartbeat " + Math.floor(age / 1000) + "s ago";
+      if (age < 60000) return "Offline / asleep · last seen " + Math.floor(age / 1000) + "s ago";
+      if (age < 3600000) return "Offline / asleep · last seen " + Math.floor(age / 60000) + "m ago";
+      return "Offline / asleep · last seen " + Math.floor(age / 3600000) + "h ago";
+    }
+    function requireOnline(id) {
+      if (isOnline(id)) return true;
+      toast("This headset is offline or asleep. Put it on and open the app first.", true);
+      render();
+      return false;
     }
     function nodeAt(parts, create) {
       let obj = state;
@@ -197,27 +216,37 @@
         if (env.data === null || env.data === undefined) delete parent[leaf];
         else parent[leaf] = env.data;
       }
-      touch(parts);
     }
     function applyPatch(env) {
       const parts = (env.path || "/").split("/").filter(Boolean);
       const node = nodeAt(parts, true);
       if (env.data && typeof env.data === "object") Object.assign(node, env.data);
-      touch(parts);
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
     function render() {
       const ids = Object.keys(state).filter((id) => state[id] && typeof state[id] === "object");
-      ids.sort((a, b) => num(state[a].connectedAt) - num(state[b].connectedAt));
-      emptyEl.style.display = ids.length ? "none" : "block";
+      ids.sort((a, b) => Number(isOnline(b)) - Number(isOnline(a)) || num(state[b].lastSeen) - num(state[a].lastSeen));
+      const online = ids.filter(isOnline), offline = ids.filter(id => !isOnline(id));
+      emptyEl.style.display = online.length ? "none" : "block";
+      emptyEl.textContent = "No active headsets. Put on the Quest and open ImmersiveSmile to connect.";
+      const expanded = usersEl.querySelector(".offline-list")?.open || false;
       usersEl.innerHTML = "";
-      ids.forEach((id, i) => usersEl.appendChild(card(id, i + 1)));
+      online.forEach(id => usersEl.appendChild(card(id)));
+      if (offline.length) {
+        const group = document.createElement("details");
+        group.className = "offline-list"; group.open = expanded;
+        const summary = document.createElement("summary");
+        summary.textContent = offline.length + " offline / saved devices";
+        group.appendChild(summary);
+        offline.forEach(id => group.appendChild(card(id)));
+        usersEl.appendChild(group);
+      }
     }
 
-    function card(id, n) {
+    function card(id) {
       const u = state[id] || {};
-      const online = Date.now() - (lastSeenLocal[id] || 0) < OFFLINE_MS;
+      const online = isOnline(id);
       const sceneId = u.scene && typeof u.scene.id === "number" ? u.scene.id : null;
       const segs = segmentsOf(u);
       const stopped = stopOf(u);
@@ -229,8 +258,8 @@
       head.className = "u-head";
       head.innerHTML =
         '<span class="u-dot ' + (online ? "on" : "off") + '"></span>' +
-        '<div class="u-id"><div class="u-name">User ' + n + '</div>' +
-        '<div class="u-sub">' + esc(u.name || "device") + ' &middot; ' + esc(id.slice(0, 6)) + '</div></div>' +
+        '<div class="u-id"><div class="u-name">' + esc(u.name || 'Headset') + '</div>' +
+        '<div class="u-sub">' + esc(lastSeenLabel(u)) + ' &middot; ID ' + esc(id) + '</div></div>' +
         '<div class="u-input">BLE input<br><b>' + fmt(u.input) + '</b></div>' +
         '<button class="u-x" title="Remove user">✕</button>';
       head.querySelector(".u-x").addEventListener("click", () => removeUser(id));
@@ -239,7 +268,7 @@
       const current = document.createElement("div");
       current.className = "current-scene";
       const selected = sceneById(sceneId);
-      current.textContent = "Selected: " + (selected ? selected.label : sceneId === null ? "Not selected" : "Unknown scene (ID " + sceneId + ")");
+      current.textContent = "Requested scene: " + (selected ? selected.label : sceneId === null ? "Not selected" : "Unknown scene (ID " + sceneId + ")");
       el.appendChild(current);
 
       for (const group of SCENE_GROUPS) {
@@ -257,6 +286,7 @@
           b.textContent = s.label;
           b.title = s.name + " · ID " + s.id;
           b.setAttribute("aria-pressed", String(s.id === sceneId));
+          b.disabled = !online;
           b.addEventListener("click", () => setUserScene(id, s));
           row.appendChild(b);
         }
@@ -275,6 +305,7 @@
         b.className = "seg-btn" + (s.n === segs ? " active" : "");
         b.textContent = s.label;
         b.title = s.n + " x 30s segment" + (s.n === 1 ? "" : "s");
+        b.disabled = !online;
         b.addEventListener("click", () => setUserSegments(id, s.n));
         seg.appendChild(b);
       }
@@ -285,6 +316,7 @@
       stopBtn.title = stopped
         ? "Start the loop again from the top"
         : "Say goodbye, then hand the room back (passthrough)";
+      stopBtn.disabled = !online;
       stopBtn.addEventListener("click", () => setUserStop(id, !stopped));
       seg.appendChild(stopBtn);
 
@@ -293,7 +325,7 @@
       if (stopped) {
         const note = document.createElement("div");
         note.className = "ended-note";
-        note.textContent = "Session ended — farewell played, passthrough on.";
+        note.textContent = "End requested — awaiting the headset farewell and passthrough.";
         el.appendChild(note);
       }
 
@@ -312,6 +344,7 @@
     // carried across or switching scene would silently reset the loop length.
     // stop is deliberately cleared instead: picking a scene means "play this now".
     async function setUserScene(id, s) {
+      if (!requireOnline(id)) return;
       const segments = segmentsOf(state[id]);
       try {
         const res = await fetch(base + "/users/" + id + "/scene.json", {
@@ -322,7 +355,7 @@
         if (!res.ok) return toast("Failed: " + res.status, true);
         (nodeAt([id], true)).scene = { id: s.id, segments, stop: false }; // optimistic; stream confirms
         render();
-        toast("→ " + s.label);
+        toast("Sent " + s.label + " to " + (state[id]?.name || "headset") + " · " + id);
       } catch {
         toast("Network error", true);
       }
@@ -331,6 +364,7 @@
     // Ending is not a cut: the headset finishes the line being spoken, the farmer
     // says goodbye, and only then does passthrough come up. Expect ~10s.
     async function setUserStop(id, stop) {
+      if (!requireOnline(id)) return;
       try {
         const res = await fetch(base + "/users/" + id + "/scene.json", {
           method: "PATCH",
@@ -349,6 +383,7 @@
     // PATCH, so the scene selection underneath is left alone. The headset picks
     // this up on its open stream and applies it at the end of the current lap.
     async function setUserSegments(id, n) {
+      if (!requireOnline(id)) return;
       try {
         const res = await fetch(base + "/users/" + id + "/scene.json", {
           method: "PATCH",
@@ -380,12 +415,12 @@
         const es = new EventSource(usersUrl);
         const handle = (apply) => (e) => {
           stopPolling();
-          setStatus("live", "live");
+          setStatus("live", "database connected");
           try { apply(JSON.parse(e.data)); render(); } catch { /* keep-alive / null */ }
         };
         es.addEventListener("put", handle(applyPut));
         es.addEventListener("patch", handle(applyPatch));
-        es.onopen = () => setStatus("live", "live");
+        es.onopen = () => setStatus("live", "database connected");
         es.onerror = () => { setStatus("poll", "polling…"); startPolling(); };
       } catch {
         startPolling();
@@ -394,9 +429,10 @@
 
     async function pollUsers() {
       try {
-        const data = await (await fetch(usersUrl)).json();
+        const response = await fetch(usersUrl);
+        if (!response.ok) throw new Error("Database read failed: " + response.status);
+        const data = await response.json();
         state = data || {};
-        for (const id of Object.keys(state)) lastSeenLocal[id] = Date.now();
         render();
       } catch {
         setStatus("down", "unreachable");
