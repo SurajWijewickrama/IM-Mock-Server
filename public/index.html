@@ -49,15 +49,19 @@
     .u-x { background: transparent; border: 0; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
     .u-x:hover { color: var(--bad); background: rgba(239,68,68,.1); }
 
+    .scene-group { margin: 14px 0 0; padding: 0; border: 0; min-width: 0; }
+    .scene-group legend, .current-scene { color: var(--muted); font-size: .78rem; }
+    .current-scene { margin-top: 12px; }
+    .s-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
     .s-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .s-btn { appearance: none; cursor: pointer; background: var(--panel-2); color: var(--text);
-             border: 2px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: .85rem;
+             border: 2px solid var(--border); border-radius: 10px; min-height: 44px; padding: 8px 12px; font-size: .85rem;
              transition: transform .06s, border-color .15s, background .15s; }
     .s-btn:hover { background: #324155; }
     .s-btn:active { transform: scale(.96); }
     .s-btn.active { border-color: var(--accent); background: linear-gradient(180deg, #0b3b52, #0c2c40); color: var(--accent); }
 
-    .seg { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+    .seg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px;
            padding-top: 12px; border-top: 1px solid var(--border); }
     .seg-label { font-size: .72rem; color: var(--muted); flex: 1; }
     .seg-label b { color: var(--text); font-weight: 600; }
@@ -87,7 +91,7 @@
     <header>
       <div>
         <h1>Scene Control</h1>
-        <div class="sub">ImmersiveSmilePlus VR &middot; per-user remote selector</div>
+        <div class="sub">ImmersiveSmilePlus VR &middot; <span id="sceneCount">Scene library</span></div>
       </div>
       <div class="status"><span id="dot" class="dot"></span><span id="statusText">connecting…</span></div>
     </header>
@@ -109,12 +113,26 @@
 
     // Must match SceneSelector.cs Scene Mappings and Unity Build Settings.
     const SCENES = [
-      { id: 0, name: "MainScene",              label: "Main Menu" },
-      { id: 1, name: "Scene_1_Car_dealership", label: "Car Dealership" },
-      { id: 2, name: "Scene_2_Castle",         label: "Castle" },
-      { id: 3, name: "Scene_R1",               label: "Scene R1" },
-      { id: 4, name: "Scene_3_farm",           label: "Farm" },
+      { id: 0, name: "MainScene", label: "Main Menu", group: "Classic scenes" },
+      { id: 1, name: "Scene_1_Car_dealership", label: "Car Dealership", group: "Classic scenes" },
+      { id: 2, name: "Scene_2_Castle", label: "Castle", group: "Classic scenes" },
+      { id: 3, name: "Scene_R1", label: "Scene R1", group: "Classic scenes" },
+      { id: 4, name: "Scene_3_farm", label: "Farm", group: "Classic scenes" },
+      { id: 20, name: "SleepingOcean", label: "Sleeping Ocean", group: "Experiences" },
+      { id: 21, name: "LumiStarfall", label: "Lumi Starfall · Pearl Garden", group: "Experiences" },
+      { id: 22, name: "DreamRoad", label: "Dream Road", group: "Experiences" },
+      { id: 23, name: "CloudVoyage", label: "Cloud Voyage", group: "Experiences" },
+      { id: 24, name: "StarHeart", label: "StarHeart", group: "Experiences" },
+      { id: 25, name: "FastLumiValley", label: "Lumi Valley · Heartlight", group: "Experiences" },
+      { id: 26, name: "ImpossibleGarden", label: "Impossible Garden", group: "Impossible Garden variants" },
+      { id: 27, name: "ImpossibleGarden_NoVideos", label: "Impossible Garden · No Videos", group: "Impossible Garden variants" },
+      { id: 28, name: "ImpossibleGarden_Mochi", label: "Impossible Garden · Mochi", group: "Impossible Garden variants" },
+      { id: 29, name: "ImpossibleGarden_Mochi_NoVideos", label: "Impossible Garden · Mochi / No Videos", group: "Impossible Garden variants" },
+      { id: 30, name: "LumiValley", label: "Lumi Valley · Pip Journey", group: "Experiences" },
+      { id: 31, name: "spaceIsland", label: "Space Island", group: "Experiences" },
     ];
+    const SCENE_GROUPS = ["Experiences", "Impossible Garden variants", "Classic scenes"];
+    document.getElementById("sceneCount").textContent = SCENES.length + " scenes available";
     // How much of a scene plays before it loops. Each segment is ~30s of authored
     // content; a scene that has fewer simply clamps (SceneSelector -> ISegmentedLoop).
     // Must match SceneSelector.cs maxSegments.
@@ -218,16 +236,33 @@
       head.querySelector(".u-x").addEventListener("click", () => removeUser(id));
       el.appendChild(head);
 
-      const row = document.createElement("div");
-      row.className = "s-row";
-      for (const s of SCENES) {
-        const b = document.createElement("button");
-        b.className = "s-btn" + (s.id === sceneId ? " active" : "");
-        b.textContent = s.label;
-        b.addEventListener("click", () => setUserScene(id, s));
-        row.appendChild(b);
+      const current = document.createElement("div");
+      current.className = "current-scene";
+      const selected = sceneById(sceneId);
+      current.textContent = "Selected: " + (selected ? selected.label : sceneId === null ? "Not selected" : "Unknown scene (ID " + sceneId + ")");
+      el.appendChild(current);
+
+      for (const group of SCENE_GROUPS) {
+        const section = document.createElement("fieldset");
+        section.className = "scene-group";
+        const legend = document.createElement("legend");
+        legend.textContent = group;
+        section.appendChild(legend);
+        const row = document.createElement("div");
+        row.className = "s-row";
+        for (const s of SCENES.filter((scene) => scene.group === group)) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "s-btn" + (s.id === sceneId ? " active" : "");
+          b.textContent = s.label;
+          b.title = s.name + " · ID " + s.id;
+          b.setAttribute("aria-pressed", String(s.id === sceneId));
+          b.addEventListener("click", () => setUserScene(id, s));
+          row.appendChild(b);
+        }
+        section.appendChild(row);
+        el.appendChild(section);
       }
-      el.appendChild(row);
 
       const seg = document.createElement("div");
       seg.className = "seg";
