@@ -1,6 +1,6 @@
 # ImmersiveSmile remote scene control
 
-Firebase-hosted dashboard in `public/index.html`. The scene catalog was synchronized on 28 September 2026 with `SceneSelector.cs` and the 17 enabled scenes in Unity `ProjectSettings/EditorBuildSettings.asset`.
+Firebase-hosted dashboard in `public/index.html`. The scene catalog was synchronized on 28 September 2026 with `SceneSelector.cs` and the 18 enabled scenes in Unity `ProjectSettings/EditorBuildSettings.asset`.
 
 | ID | Unity scene |
 | --- | --- |
@@ -21,14 +21,15 @@ Firebase-hosted dashboard in `public/index.html`. The scene catalog was synchron
 | 29 | `ImpossibleGarden_Mochi_NoVideos` |
 | 30 | `LumiValley` |
 | 31 | `spaceIsland` |
+| 32 | `Scene_4_Solarland` |
 
-IDs are stable content IDs, not Unity build indices. Lumi Starfall uses the updated Pearl Garden content while retaining ID 21. The original serialized MainScene mappings supply IDs 0–4; SceneSelector adds IDs 20–31 at startup.
+IDs are stable content IDs, not Unity build indices. Lumi Starfall uses the updated Pearl Garden content while retaining ID 21. The original serialized MainScene mappings supply IDs 0–4; SceneSelector adds IDs 20–32 at startup.
 
 Selecting a scene writes its ID/name to `/users/{userId}/scene`, retains the segment count, and sets `stop: false`. The existing End/Resume and segment controls remain available. A headset must run a build containing these mappings and scenes.
 
 Additional asset-pack/demo/recovery scenes and scenes without an enabled build entry and remote mapping are intentionally not launch buttons. Register and enable a new Unity scene before adding its stable ID here.
 
-Validation: catalog matched all 17 enabled Unity scenes and runtime mappings; simulated clicks on all 17 buttons verified outgoing Firebase payloads and selected-state updates. No live Firebase writes or headset playback were exercised. Changes are local until the site's normal Firebase Hosting deployment runs.
+Validation: catalog matched all 18 enabled Unity scenes and runtime mappings; simulated clicks on all 18 buttons verified outgoing Firebase payloads and selected-state updates. No live Firebase writes or headset playback were exercised. Changes are local until the site's normal Firebase Hosting deployment runs.
 
 ## Headset connection and scene commands
 

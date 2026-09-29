@@ -12,11 +12,11 @@ const elements={},requests=[];
 const context=vm.createContext({document:{getElementById:id=>elements[id]??=new Element('div'),createElement:t=>new Element(t)},EventSource:class{addEventListener(){}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){},fetch:async(url,opt)=>{requests.push({url,...opt});return{ok:true,status:200}},console});
 vm.runInContext(script,context);
 const scenes=JSON.parse(vm.runInContext('JSON.stringify(SCENES)',context));
-assert.equal(new Set(scenes.map(s=>s.id)).size,17);
+assert.equal(new Set(scenes.map(s=>s.id)).size,18);
 vm.runInContext('state={test:{name:"Test headset",lastSeen:Date.now(),scene:{id:0,segments:3,stop:true}}};render()',context);
 function all(el){return [el,...el.children.flatMap(all)];}
 let buttons=all(elements.users).filter(el=>el.className?.startsWith('s-btn'));
-assert.equal(buttons.length,17);
+assert.equal(buttons.length,18);
 (async()=>{
  vm.runInContext('applyPut({path:"/old",data:{name:"Quest 2",lastSeen:Date.now()-86400000,scene:{id:0}}});render()',context);
  assert.equal(vm.runInContext('isOnline("old")',context),false,'snapshot must not revive old headset');
@@ -43,5 +43,5 @@ assert.equal(buttons.length,17);
   assert.equal(body.id,scene.id);assert.equal(body.name,scene.name);assert.equal(body.segments,3);assert.equal(body.stop,false);
   assert.equal(all(elements.users).filter(el=>el.attributes['aria-pressed']==='true').length,1);
  }
- console.log('PASS: stale snapshots/scene writes stay offline, offline commands blocked, active devices first; all 17 buttons send correct Firebase ID/name, retain segments, clear stop and update active selection. No live Firebase requests sent.');
+ console.log('PASS: stale snapshots/scene writes stay offline, offline commands blocked, active devices first; all 18 buttons send correct Firebase ID/name, retain segments, clear stop and update active selection. No live Firebase requests sent.');
 })().catch(e=>{console.error(e);process.exitCode=1});
