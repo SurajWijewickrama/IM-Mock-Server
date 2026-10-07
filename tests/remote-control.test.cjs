@@ -43,5 +43,17 @@ assert.equal(buttons.length,19);
   assert.equal(body.id,scene.id);assert.equal(body.name,scene.name);assert.equal(body.segments,3);assert.equal(body.stop,false);
   assert.equal(all(elements.users).filter(el=>el.attributes['aria-pressed']==='true').length,1);
  }
+ // renaming: stored under /label (never the headset-owned /name), survives a headset re-registering, and can be reset
+ await vm.runInContext('renameUser("test","  Chair 2  ")',context);
+ let r=requests.at(-1);
+ assert.equal(r.method,'PUT');assert.ok(r.url.endsWith('/users/test/label.json'));assert.equal(JSON.parse(r.body),'Chair 2');
+ assert.equal(vm.runInContext('displayName(state.test)',context),'Chair 2');
+ vm.runInContext('applyPatch({path:"/test",data:{name:"Quest 3S",lastSeen:Date.now()}})',context);
+ assert.equal(vm.runInContext('displayName(state.test)',context),'Chair 2','headset re-registering its model name must not undo the rename');
+ await vm.runInContext('renameUser("test","")',context);
+ r=requests.at(-1);
+ assert.equal(r.method,'DELETE');assert.ok(r.url.endsWith('/users/test/label.json'));
+ assert.equal(vm.runInContext('displayName(state.test)',context),'Quest 3S');
+ console.log('PASS: rename writes /label only, survives headset re-registration, and resets to the model name.');
  console.log('PASS: stale snapshots/scene writes stay offline, offline commands blocked, active devices first; all 19 buttons send correct Firebase ID/name, retain segments, clear stop and update active selection. No live Firebase requests sent.');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -47,6 +47,8 @@
     .u-dot.off { background: var(--bad); }
     .u-id { flex: 1; min-width: 0; }
     .u-name { font-weight: 650; font-size: 1rem; }
+    .u-edit { background: transparent; border: 0; color: var(--muted); font-size: .85rem; cursor: pointer; padding: 0 5px; border-radius: 6px; }
+    .u-edit:hover { color: var(--accent); }
     .u-sub { color: var(--muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .u-input { text-align: right; font-size: .68rem; color: var(--muted); line-height: 1.25; }
     .u-input b { color: var(--accent); font-size: 1.05rem; }
@@ -167,6 +169,8 @@
     let pollTimer = null;
 
     const sceneById = (id) => SCENES.find((s) => s.id === id);
+    // custom label set from this dashboard, else the model name the headset reported
+    const displayName = (u) => (u && (u.label || u.name)) || "Headset";
     const num = (x) => (typeof x === "number" ? x : 0);
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
     const fmt = (v) => (Number.isFinite(+v) ? (+v).toFixed(1).replace(/\.0$/, "") : "0");
@@ -260,11 +264,16 @@
       head.className = "u-head";
       head.innerHTML =
         '<span class="u-dot ' + (online ? "on" : "off") + '"></span>' +
-        '<div class="u-id"><div class="u-name">' + esc(u.name || 'Headset') + '</div>' +
-        '<div class="u-sub">' + esc(lastSeenLabel(u)) + ' &middot; ID ' + esc(id) + '</div></div>' +
+        '<div class="u-id"><div class="u-name">' + esc(displayName(u)) +
+        ' <button class="u-edit" title="Rename this headset" aria-label="Rename this headset">✎</button></div>' +
+        '<div class="u-sub">' + (u.label && u.name ? esc(u.name) + ' &middot; ' : '') + esc(lastSeenLabel(u)) + ' &middot; ID ' + esc(id) + '</div></div>' +
         '<div class="u-input">BLE input<br><b>' + fmt(u.input) + '</b></div>' +
         '<button class="u-x" title="Remove user">✕</button>';
       head.querySelector(".u-x").addEventListener("click", () => removeUser(id));
+      head.querySelector(".u-edit").addEventListener("click", () => {
+        const next = window.prompt("Name for this headset (leave empty to go back to \"" + (u.name || "Headset") + "\")", u.label || "");
+        if (next !== null) renameUser(id, next);
+      });
       el.appendChild(head);
 
       const current = document.createElement("div");
@@ -357,7 +366,7 @@
         if (!res.ok) return toast("Failed: " + res.status, true);
         (nodeAt([id], true)).scene = { id: s.id, segments, stop: false }; // optimistic; stream confirms
         render();
-        toast("Sent " + s.label + " to " + (state[id]?.name || "headset") + " · " + id);
+        toast("Sent " + s.label + " to " + displayName(state[id]) + " · " + id);
       } catch {
         toast("Network error", true);
       }
@@ -396,6 +405,26 @@
         (nodeAt([id, "scene"], true)).segments = n; // optimistic; stream confirms
         render();
         toast(n + " segment" + (n === 1 ? "" : "s") + " · " + (SEGMENTS.find((s) => s.n === n) || {}).label);
+      } catch {
+        toast("Network error", true);
+      }
+    }
+
+    // The custom name is stored in its own key, /users/{id}/label. The headset writes
+    // "name" (its model, e.g. "Quest 3S") every time the app starts, but only ever merges
+    // its own keys, so a label set here survives restarts. Works for offline headsets too:
+    // it is a note on the record, not a command to the device.
+    async function renameUser(id, value) {
+      const label = String(value ?? "").trim().slice(0, 40);
+      try {
+        const res = await fetch(base + "/users/" + id + "/label.json", label
+          ? { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(label) }
+          : { method: "DELETE" });
+        if (!res.ok) return toast("Failed: " + res.status, true);
+        const node = nodeAt([id], true);
+        if (label) node.label = label; else delete node.label;
+        render();
+        toast(label ? "Renamed to " + label : "Name reset");
       } catch {
         toast("Network error", true);
       }
