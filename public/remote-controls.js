@@ -176,7 +176,7 @@ function appendRemoteControls(parent,id) {
     remoteButton(panel,'Resume showcase',ready,()=>commandNightfall(id,'resume'));
     remoteButton(panel,'Reset to gallery',ready,()=>commandNightfall(id,'reset'));
     remoteButton(panel,'Finish session',ready,()=>commandNightfall(id,'finish'));
-    panel.appendChild(remoteElement('p','The selected hand is also used for ball tracking. Relax your grip briefly to centre wrist steering. Losing ball input pauses; wrist tracking loss returns steering to the guided route. Procedure mode stays parked. Controller fallback: trigger drive; A/X engine; B/Y Stop; grip window; stick click door; stick left/right lighting; up/down D/P. Car controls stay in VR.'));
+    panel.appendChild(remoteElement('p','The selected hand is also used for ball tracking. Relax your grip briefly to centre wrist steering. With APK 0.2.5+, the gallery waits for hand tracking to return. After entering the car, losing ball input pauses; wrist tracking loss returns steering to the guided route. Procedure mode stays parked. Controller fallback: trigger drive; A/X engine; B/Y Stop; grip window; stick click door; stick left/right lighting; up/down D/P. Car controls stay in VR.'));
     parent.appendChild(panel);
   }
   const ball=remoteElement('details',undefined,'remote-panel');ball.id='remote-'+id+'-ball-panel';

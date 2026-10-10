@@ -46,7 +46,7 @@ Ball driving and wrist steering require the full **0.2.4 APK or later**. An ordi
 
 **STOP** pauses and revokes selection permission. Switching hand, input source, wrist steering or entering Procedure mode also pauses; returning to Showcase does not automatically resume. Enable selection again and Resume when ready. Resume remains pending for up to 15 seconds while tracking returns and never starts the car automatically. Stop, configuration changes, disconnect and expiry cancel pending Resume. The dashboard shows waiting, accepted, cancelled or expired results.
 
-Loss of ball input stops movement. After tracking returns, Resume and a fresh released-then-squeezed input are required. Loss of optional wrist orientation centres steering. Procedure mode remains parked. Keep the needle arm still and use staff judgement for the opposite-hand interaction; this feature has not been clinically validated.
+With APK **0.2.5+**, brief input loss in the gallery disables selection until a valid hand sample returns, without revoking existing staff permission or clearing explicit Stop. After entering the car, loss of ball input stops movement; Resume and a fresh released-then-squeezed input are required. Loss of optional wrist orientation centres steering. Procedure mode remains parked. Keep the needle arm still and use staff judgement for the opposite-hand interaction; this feature has not been clinically validated.
 
 **Reset to gallery** resets the session and disables selection until staff enable it again. **Finish session** invokes the app's ending. Mute applies to Nightfall audio. Input source, throttle, steering readiness, car, scene beat, distance, hand and pause/selection state are headset reports, not assumed command results.
 
