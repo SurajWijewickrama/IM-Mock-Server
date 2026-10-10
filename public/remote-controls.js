@@ -18,12 +18,12 @@ function nightfallReady(id) {
 }
 function nightfallFeedback(status, control={}) {
   if (!freshStatus(status)) return 'Waiting for fresh headset status.';
-  const messages={waiting_for_tracking:'Resume is waiting for tracking. Keep the headset on and the active controller in view.',resumed:'Resume accepted by headset.',expired:'Resume expired before tracking returned. Hold the active controller and press Resume again.',cancelled_by_stop:'Pending Resume cancelled by Stop or a controller/mode change.',cancelled:'Pending Resume cancelled.',superseded:'An updated command replaced the pending Resume.',reset_required:'Session finished. Use Reset to gallery before resuming.',blocked:'Resume blocked by the current mode or input state.',reset:'Gallery reset accepted.',finished:'Session finished.',stopped:'Stop accepted.'};
+  const messages={waiting_for_tracking:'Resume is waiting for tracking. Keep the headset on and the selected input hand in view.',resumed:'Resume accepted by headset.',expired:'Resume expired before tracking returned. Keep the selected hand in view and press Resume again.',cancelled_by_stop:'Pending Resume cancelled by Stop or an input/mode change.',cancelled:'Pending Resume cancelled.',superseded:'An updated command replaced the pending Resume.',reset_required:'Session finished. Use Reset to gallery before resuming.',blocked:'Resume blocked by the current mode or input state.',reset:'Gallery reset accepted.',finished:'Session finished.',stopped:'Stop accepted.'};
   const input=status.inputValid===false ? 'Input unavailable: '+(status.inputStatus||'waiting for tracking').replaceAll('_',' ')+'. ' : '';
   if(control.stop===true) return input+'STOP is active. Resume showcase clears it with a fresh staff command.';
-  if(control.commandId && status.commandId===control.commandId && status.commandResult==='resumed' && status.stopped) return input+'Resume was accepted, but the headset paused again. Keep it on and the active controller in view, then Resume.';
+  if(control.commandId && status.commandId===control.commandId && status.commandResult==='resumed' && status.stopped) return input+'Resume was accepted, but the headset paused again. Keep it on and the selected input hand in view, then Resume.';
   if(control.commandId && status.commandId===control.commandId) return input+(messages[status.commandResult]||status.commandResult||'Waiting for command result.');
-  if(control.commandId && control.expiresAt<Date.now()) return input+'Last command expired. Keep the headset on, hold the active controller, then send a fresh Resume.';
+  if(control.commandId && control.expiresAt<Date.now()) return input+'Last command expired. Keep the headset on, keep the selected hand in view, then send a fresh Resume.';
   if(control.commandId) return input+'Command sent; waiting for the headset to report its result.';
   return input+(status.inputValid===undefined?'This APK does not report input/Resume results. Install the updated build for tracking feedback.':'No staff command pending.');
 }
@@ -61,14 +61,15 @@ async function patchRemote(id, paths, current=()=>true) {
 async function liveNightfall(id) {
   if (!nightfallReady(id)) throw Error('Open Nightfall on this headset and wait for fresh session status.');
   const status=await remoteRequest(id,'/nightfall/status');
-  if (!freshStatus(status) || !status.ready || !status.bootId) throw Error('Nightfall status is stale. Put on the headset and hold its active controller.');
+  if (!freshStatus(status) || !status.ready || !status.bootId) throw Error('Nightfall status is stale. Put on the headset and keep the selected hand in view.');
   return status;
 }
 function setNightfall(id, values) {
-  const allowed=['selectionEnabled','activeHand','mode','muted'];
+  const allowed=['selectionEnabled','activeHand','mode','muted','wristSteeringEnabled'];
   if (Object.keys(values).some(k=>!allowed.includes(k)) ||
       ('selectionEnabled' in values && typeof values.selectionEnabled!=='boolean') ||
       ('muted' in values && typeof values.muted!=='boolean') ||
+      ('wristSteeringEnabled' in values && typeof values.wristSteeringEnabled!=='boolean') ||
       ('activeHand' in values && !['left','right'].includes(values.activeHand)) ||
       ('mode' in values && !['showcase','procedure'].includes(values.mode))) {
     toast('Unsupported Nightfall setting.',true);return Promise.resolve();
@@ -76,8 +77,12 @@ function setNightfall(id, values) {
   return remoteAction(id,async current=>{
     await liveNightfall(id);
     const paths=Object.fromEntries(Object.entries(values).map(([k,v])=>['nightfall/control/'+k,v]));
+    if(values.activeHand) Object.assign(paths,ballHandPaths(values.activeHand));
     if(await patchRemote(id,paths,current)) toast('Nightfall setting sent. Check the reported status below.');
   });
+}
+function ballHandPaths(hand) {
+  return {'stressBall/control/schemaVersion':1,'stressBall/control/hand':hand,'stressBall/control/revision':remoteId()};
 }
 function stopNightfall(id) {
   return remoteAction(id,async current=>{
@@ -94,12 +99,14 @@ function commandNightfall(id, command) {
     };
     if(command==='resume'||command==='reset') {
       paths['scene/stop']=false;paths['nightfall/control/stop']=false;paths['nightfall/control/mode']='showcase';
+      const hand=state[id]?.nightfall?.control?.activeHand || status.hand?.toLowerCase() || 'right';
+      if(['left','right'].includes(hand)) Object.assign(paths,ballHandPaths(hand));
     }
     // Unity ignores every one-shot while control.stop is true. Finish itself
     // stops the session, so clear that transport latch while retaining scene Stop.
     if(command==='finish') {paths['nightfall/control/stop']=false;paths['scene/stop']=true;}
     if(command!=='resume') paths['nightfall/control/selectionEnabled']=false;
-    if(await patchRemote(id,paths,current)) toast(command==='resume'?'Resume requested. Keep the headset on and hold the active controller; check the headset result.':command==='reset'?'Reset sent. Enable car selection again when ready.':'Finish sent.');
+    if(await patchRemote(id,paths,current)) toast(command==='resume'?'Resume requested. Keep the headset on and keep the selected hand in view; check the headset result.':command==='reset'?'Reset sent. Enable car selection again when ready.':'Finish sent.');
   });
 }
 function saveBall(id, values) {
@@ -155,19 +162,21 @@ function appendRemoteControls(parent,id) {
   if(isNightfall(u) || u.scene?.id===34) {
     const panel=remoteElement('section',undefined,'remote-panel'),s=u.nightfall?.status,c=u.nightfall?.control||{},ready=nightfallReady(id);
     panel.appendChild(remoteElement('h2','Nightfall · Car gallery & drive'));
-    panel.appendChild(remoteElement('p','1. Enable car selection. 2. Hold the active controller and Resume showcase. 3. Point at a car/name and tap trigger; press again in the cabin to drive.'));
-    panel.appendChild(remoteElement('output',ready?`${s.car}\n${s.beat} · ${s.stopped?'PAUSED':s.travelling?'Driving':'Parked'} · ${fmt(s.distance)} m\nSelection ${s.selectionEnabled?'enabled':'disabled'} on headset · ${s.hand} controller`:'Waiting for live Nightfall status. Open Nightfall on this headset.'));
+    panel.appendChild(remoteElement('p','1. Choose the opposite hand and allow car selection. 2. Hold the soft ball relaxed where the Quest can see it, then Resume showcase. 3. Look at a car and squeeze gently. In the cabin, relax once, then squeeze to accelerate and release to brake.'));
+    panel.appendChild(remoteElement('output',ready?`${s.car}\n${s.beat} · ${s.stopped?'PAUSED':s.travelling?'Driving':'Parked'} · ${fmt(s.distance)} m\nSelection ${s.selectionEnabled?'enabled':'disabled'} on headset · ${s.hand} input hand`:'Waiting for live Nightfall status. Open Nightfall on this headset.'));
     panel.appendChild(remoteElement('p',nightfallFeedback(s,c)));
     if(s?.buildSceneCount===1) panel.appendChild(remoteElement('p','Nightfall-only test APK: install the full APK to open the other scenes.'));
     remoteButton(panel,'STOP',online,()=>stopNightfall(id),true);
     remoteField(panel,id,'selection','Allow car selection (staff permission)',!!c.selectionEnabled,null,v=>setNightfall(id,{selectionEnabled:v}),!ready);
-    remoteField(panel,id,'hand','Active controller',c.activeHand||'right',[['right','Right'],['left','Left']],v=>setNightfall(id,{activeHand:v}),!ready);
+    remoteField(panel,id,'hand','Interaction hand · opposite the needle arm',c.activeHand||'right',[['right','Right'],['left','Left']],v=>setNightfall(id,{activeHand:v}),!ready);
+    remoteField(panel,id,'wrist','Small wrist steering · opposite hand only',!!c.wristSteeringEnabled,null,v=>setNightfall(id,{wristSteeringEnabled:v}),!ready||typeof s?.wristSteeringEnabled!=='boolean');
+    if(s?.inputSource) panel.appendChild(remoteElement('output',`Input: ${s.inputSource.replaceAll('_',' ')} · throttle ${Math.round((s.throttle||0)*100)}%\nSteering ${s.wristSteeringEnabled?(s.steeringCalibrated?'ready':'relax grip to centre'):'guided route'} · ordinary-ball squeeze is a hand estimate`));
     remoteField(panel,id,'mode','Mode',c.mode||'showcase',[['showcase','Showcase'],['procedure','Procedure · parked']],v=>setNightfall(id,{mode:v}),!ready);
     remoteField(panel,id,'mute','Mute Nightfall audio',!!c.muted,null,v=>setNightfall(id,{muted:v}),!ready);
     remoteButton(panel,'Resume showcase',ready,()=>commandNightfall(id,'resume'));
     remoteButton(panel,'Reset to gallery',ready,()=>commandNightfall(id,'reset'));
     remoteButton(panel,'Finish session',ready,()=>commandNightfall(id,'finish'));
-    panel.appendChild(remoteElement('p','Changing controller or losing tracking pauses the session. Resume does not start the car. Cabin: trigger drive; A/X engine; B/Y Stop; grip window; stick click door; stick left/right lighting; up/down D/P. Car controls stay in VR.'));
+    panel.appendChild(remoteElement('p','The selected hand is also used for ball tracking. Relax your grip briefly to centre wrist steering. Losing ball input pauses; wrist tracking loss returns steering to the guided route. Procedure mode stays parked. Controller fallback: trigger drive; A/X engine; B/Y Stop; grip window; stick click door; stick left/right lighting; up/down D/P. Car controls stay in VR.'));
     parent.appendChild(panel);
   }
   const ball=remoteElement('details',undefined,'remote-panel');ball.id='remote-'+id+'-ball-panel';

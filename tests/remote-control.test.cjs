@@ -80,9 +80,11 @@ function nightfall(){
  await run('setNightfall("test",{selectionEnabled:true})');
  assert.deepEqual(payload(),{'nightfall/control/selectionEnabled':true});
  assert.equal(run('state.test.nightfall.status.selectionEnabled'),false,'permission is not a headset acknowledgement');
+ await run('setNightfall("test",{activeHand:"left",wristSteeringEnabled:true})');
+ assert.equal(payload()['stressBall/control/hand'],'left');assert.equal(payload()['nightfall/control/wristSteeringEnabled'],true);assert.equal(payload()['stressBall/control/schemaVersion'],1);
  await run('commandNightfall("test","resume")');
  let body=payload();assert.equal(body['nightfall/control/bootId'],'fresh-server-boot');
- assert.equal(body['nightfall/control/command'],'resume');assert.equal(body['scene/stop'],false);
+ assert.equal(body['nightfall/control/command'],'resume');assert.equal(body['scene/stop'],false);assert.equal(body['stressBall/control/hand'],'left');
  assert.ok(body['nightfall/control/expiresAt']>Date.now()&&body['nightfall/control/expiresAt']<=Date.now()+15000);
  assert.equal(run('state.test.nightfall.status.stopped'),true,'sent resume must not fabricate running status');
  const commandId=body['nightfall/control/commandId'];await run('commandNightfall("test","reset")');
