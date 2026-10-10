@@ -18,9 +18,10 @@ function nightfallReady(id) {
 }
 function nightfallFeedback(status, control={}) {
   if (!freshStatus(status)) return 'Waiting for fresh headset status.';
-  const messages={waiting_for_tracking:'Resume is waiting for tracking. Keep the headset on and the selected input hand in view.',resumed:'Resume accepted by headset.',expired:'Resume expired before tracking returned. Keep the selected hand in view and press Resume again.',cancelled_by_stop:'Pending Resume cancelled by Stop or an input/mode change.',cancelled:'Pending Resume cancelled.',superseded:'An updated command replaced the pending Resume.',reset_required:'Session finished. Use Reset to gallery before resuming.',blocked:'Resume blocked by the current mode or input state.',reset:'Gallery reset accepted.',finished:'Session finished.',stopped:'Stop accepted.'};
+  const messages={waiting_for_tracking:'Resume is waiting for tracking. Keep the headset on and the selected input hand in view.',resumed:'Resume accepted by headset.',expired:'The request expired. Check the headset and send a fresh command.',cancelled_by_stop:'Pending Resume cancelled by Stop or an input/mode change.',cancelled:'Pending Resume cancelled.',superseded:'An updated command replaced the pending Resume.',waiting_for_seated_pose:'Waiting for a worn, tracked, steady headset before opening the chosen car.',entry_started:'Car entry started. The engine starts after seating; driving needs a fresh squeeze.',recentering:'Centring requested. Wait for Seat: ready, then Resume.',reset_required:'Reset the session before starting another car.',blocked:'Resume blocked by the current mode or input state.',reset:'Session reset accepted.',finished:'Session finished.',stopped:'Stop accepted.'};
   const input=status.inputValid===false ? 'Input unavailable: '+(status.inputStatus||'waiting for tracking').replaceAll('_',' ')+'. ' : '';
   if(control.stop===true) return input+'STOP is active. Resume showcase clears it with a fresh staff command.';
+  if(status.stopped&&status.inputPause) return input+'Tracking paused. Relax, then squeeze again once your hand is tracked.';
   if(control.commandId && status.commandId===control.commandId && status.commandResult==='resumed' && status.stopped) return input+'Resume was accepted, but the headset paused again. Keep it on and the selected input hand in view, then Resume.';
   if(control.commandId && status.commandId===control.commandId) return input+(messages[status.commandResult]||status.commandResult||'Waiting for command result.');
   if(control.commandId && control.expiresAt<Date.now()) return input+'Last command expired. Keep the headset on, keep the selected hand in view, then send a fresh Resume.';
@@ -65,8 +66,9 @@ async function liveNightfall(id) {
   return status;
 }
 function setNightfall(id, values) {
-  const allowed=['selectionEnabled','activeHand','mode','muted','wristSteeringEnabled'];
+  const allowed=['selectionEnabled','selectedCar','activeHand','mode','muted','wristSteeringEnabled'];
   if (Object.keys(values).some(k=>!allowed.includes(k)) ||
+      ('selectedCar' in values && (!Number.isInteger(values.selectedCar)||values.selectedCar<0||values.selectedCar>2)) ||
       ('selectionEnabled' in values && typeof values.selectionEnabled!=='boolean') ||
       ('muted' in values && typeof values.muted!=='boolean') ||
       ('wristSteeringEnabled' in values && typeof values.wristSteeringEnabled!=='boolean') ||
@@ -90,23 +92,26 @@ function stopNightfall(id) {
   },true);
 }
 function commandNightfall(id, command) {
-  if (!['resume','reset','finish'].includes(command)) return Promise.resolve();
+  if (!['resume','reset','finish','start','recenter'].includes(command)) return Promise.resolve();
   return remoteAction(id,async current=>{
     const status=await liveNightfall(id);
+    if(['start','recenter'].includes(command)&&status.controlVersion!==2) throw Error('Install APK 0.2.6 or later for remote car selection and patient centring.');
     const paths={
       'nightfall/control/bootId':status.bootId,'nightfall/control/commandId':remoteId(),
       'nightfall/control/command':command,'nightfall/control/expiresAt':Date.now()+15000
     };
-    if(command==='resume'||command==='reset') {
+    if(command==='resume'||command==='reset'||command==='start') {
       paths['scene/stop']=false;paths['nightfall/control/stop']=false;paths['nightfall/control/mode']='showcase';
       const hand=state[id]?.nightfall?.control?.activeHand || status.hand?.toLowerCase() || 'right';
       if(['left','right'].includes(hand)) Object.assign(paths,ballHandPaths(hand));
     }
+    if(command==='start') {paths['nightfall/control/selectedCar']=state[id]?.nightfall?.control?.selectedCar ?? 2;}
+    if(command==='recenter') {paths['nightfall/control/stop']=false;paths['scene/stop']=true;}
     // Unity ignores every one-shot while control.stop is true. Finish itself
     // stops the session, so clear that transport latch while retaining scene Stop.
     if(command==='finish') {paths['nightfall/control/stop']=false;paths['scene/stop']=true;}
     if(command!=='resume') paths['nightfall/control/selectionEnabled']=false;
-    if(await patchRemote(id,paths,current)) toast(command==='resume'?'Resume requested. Keep the headset on and keep the selected hand in view; check the headset result.':command==='reset'?'Reset sent. Enable car selection again when ready.':'Finish sent.');
+    if(await patchRemote(id,paths,current)) toast(command==='start'?'Car entry requested. Keep the patient seated and headset steady; check the reported result.':command==='recenter'?'Patient centring requested. The car remains stopped.':command==='resume'?'Resume requested. Keep the headset on and keep the selected hand in view; check the headset result.':command==='reset'?'Session reset. Choose the car here and start when the patient is ready.':'Finish sent.');
   });
 }
 function saveBall(id, values) {
@@ -121,7 +126,7 @@ function saveBall(id, values) {
 }
 function sendInput(id) {
   return remoteAction(id,async current=>{
-    if(isNightfall(state[id])) throw Error('Nightfall uses the wearer’s controller or ball for car selection and driving.');
+    if(isNightfall(state[id])) throw Error('Nightfall driving uses the wearer’s controller or ball. Select the car in the staff controls.');
     if(await patchRemote(id,{triggerAt:{'.sv':'timestamp'}},current)) toast('One input pulse sent to the current scene.');
   });
 }
@@ -161,22 +166,24 @@ function appendRemoteControls(parent,id) {
   const u=state[id], online=isOnline(id);
   if(isNightfall(u) || u.scene?.id===34) {
     const panel=remoteElement('section',undefined,'remote-panel'),s=u.nightfall?.status,c=u.nightfall?.control||{},ready=nightfallReady(id);
-    panel.appendChild(remoteElement('h2','Nightfall · Car gallery & drive'));
-    panel.appendChild(remoteElement('p','1. Choose the opposite hand and allow car selection. 2. Hold the soft ball relaxed where the Quest can see it, then Resume showcase. 3. Look at a car and squeeze gently. In the cabin, relax once, then squeeze to accelerate and release to brake.'));
-    panel.appendChild(remoteElement('output',ready?`${s.car}\n${s.beat} · ${s.stopped?'PAUSED':s.travelling?'Driving':'Parked'} · ${fmt(s.distance)} m\nSelection ${s.selectionEnabled?'enabled':'disabled'} on headset · ${s.hand} input hand`:'Waiting for live Nightfall status. Open Nightfall on this headset.'));
+    panel.appendChild(remoteElement('h2','Nightfall · Seated luxury drive'));
+    panel.appendChild(remoteElement('p','1. Choose the car and the hand opposite the needle arm. 2. Fit the headset to the seated patient. 3. Press Start selected car. The view settles, the door opens and the engine starts. In the cabin, relax once, then squeeze to accelerate; release to brake.'));
+    panel.appendChild(remoteElement('output',ready?`${s.car}\n${s.beat} · ${s.stopped?'PAUSED':s.travelling?'Driving':'Parked'} · ${fmt(s.distance)} m\nSeat: ${s.seatStatus||'requires updated APK'} · ${s.hand} input hand`:'Waiting for live Nightfall status. Open Nightfall on this headset.'));
     panel.appendChild(remoteElement('p',nightfallFeedback(s,c)));
     if(s?.buildSceneCount===1) panel.appendChild(remoteElement('p','Nightfall-only test APK: install the full APK to open the other scenes.'));
     remoteButton(panel,'STOP',online,()=>stopNightfall(id),true);
-    remoteField(panel,id,'selection','Allow car selection (staff permission)',!!c.selectionEnabled,null,v=>setNightfall(id,{selectionEnabled:v}),!ready);
+    remoteField(panel,id,'car','Car · selected by staff',c.selectedCar??2,[['0','Range Rover · 2008'],['1','BMW 330i · 2025'],['2','Bentley Continental GT Speed · 2025']],v=>setNightfall(id,{selectedCar:Number(v)}),!ready||s?.controlVersion!==2);
+    remoteButton(panel,'Start selected car',ready&&s?.controlVersion===2&&!s.seated&&['Arrival','Selection'].includes(s.beat),()=>commandNightfall(id,'start'));
+    remoteButton(panel,'Centre patient view',ready&&s?.controlVersion===2,()=>commandNightfall(id,'recenter'));
     remoteField(panel,id,'hand','Interaction hand · opposite the needle arm',c.activeHand||'right',[['right','Right'],['left','Left']],v=>setNightfall(id,{activeHand:v}),!ready);
     remoteField(panel,id,'wrist','Small wrist steering · opposite hand only',!!c.wristSteeringEnabled,null,v=>setNightfall(id,{wristSteeringEnabled:v}),!ready||typeof s?.wristSteeringEnabled!=='boolean');
     if(s?.inputSource) panel.appendChild(remoteElement('output',`Input: ${s.inputSource.replaceAll('_',' ')} · throttle ${Math.round((s.throttle||0)*100)}%\nSteering ${s.wristSteeringEnabled?(s.steeringCalibrated?'ready':'relax grip to centre'):'guided route'} · ordinary-ball squeeze is a hand estimate`));
     remoteField(panel,id,'mode','Mode',c.mode||'showcase',[['showcase','Showcase'],['procedure','Procedure · parked']],v=>setNightfall(id,{mode:v}),!ready);
     remoteField(panel,id,'mute','Mute Nightfall audio',!!c.muted,null,v=>setNightfall(id,{muted:v}),!ready);
     remoteButton(panel,'Resume showcase',ready,()=>commandNightfall(id,'resume'));
-    remoteButton(panel,'Reset to gallery',ready,()=>commandNightfall(id,'reset'));
+    remoteButton(panel,'Reset session',ready,()=>commandNightfall(id,'reset'));
     remoteButton(panel,'Finish session',ready,()=>commandNightfall(id,'finish'));
-    panel.appendChild(remoteElement('p','The selected hand is also used for ball tracking. Relax your grip briefly to centre wrist steering. With APK 0.2.5+, the gallery waits for hand tracking to return. After entering the car, losing ball input pauses; wrist tracking loss returns steering to the guided route. Procedure mode stays parked. Controller fallback: trigger drive; A/X engine; B/Y Stop; grip window; stick click door; stick left/right lighting; up/down D/P. Car controls stay in VR.'));
+    panel.appendChild(remoteElement('p','The selected hand is also used for ball tracking. Relax your grip briefly to centre wrist steering. APK 0.2.6 removes VR selection. A brief tracking-only pause needs a fresh relaxed-then-squeezed grip. Staff Stop or headset removal requires Resume. The view recentres after each headset handoff; Centre patient view is available if needed. Wrist tracking loss returns steering to the guided route. Procedure mode stays parked. Controller fallback: trigger drive; A/X engine; B/Y Stop; grip window; stick click door; stick left/right lighting; up/down D/P. Car controls stay in VR.'));
     parent.appendChild(panel);
   }
   const ball=remoteElement('details',undefined,'remote-panel');ball.id='remote-'+id+'-ball-panel';
@@ -191,7 +198,7 @@ function appendRemoteControls(parent,id) {
   remoteButton(ball,'Save ball settings',online,()=>saveBall(id,draft));
   remoteButton(ball,'Use defaults',online,()=>saveBall(id,{hand:'auto',diameterMeters:.065,curlRange:.12,showConnectionNotice:false}));
   remoteButton(ball,'Send one input pulse',online&&!isNightfall(u),()=>sendInput(id));
-  ball.appendChild(remoteElement('p','Settings are sent only when saved. A remote pulse activates the current scene’s supported interaction; passive scenes may ignore it. Nightfall selection and driving use the wearer’s controller or ball.'));
+  ball.appendChild(remoteElement('p','Settings are sent only when saved. A remote pulse activates the current scene’s supported interaction; passive scenes may ignore it. Nightfall car selection happens here; driving uses the wearer’s controller or ball.'));
   parent.appendChild(ball);
   const advanced=remoteElement('details',undefined,'remote-panel');advanced.id='remote-'+id+'-presentation-panel';advanced.appendChild(remoteElement('summary','Presentation preview · advanced'));
   const t=u.telemetry,available=online&&freshStatus(t,'capturedAt',6000)&&!!t.bootId;

@@ -118,5 +118,16 @@ function nightfall(){
  nightfall();failNext=true;before=requests.length;await run('setNightfall("test",{muted:true})');
  assert.equal(requests.length,before+1);assert.equal(run('state.test.nightfall.control?.muted'),undefined);
  assert.match(elements.toast.textContent,/403/,'network failures are visible');
+ nightfall();
+ before=requests.length;await run('commandNightfall("test","start")');assert.equal(requests.length,before+1,'older APK cannot receive a start write');
+ responseData.controlVersion=2;run('state.test.nightfall.status.controlVersion=2');
+ await run('setNightfall("test",{selectedCar:1})');assert.equal(payload()['nightfall/control/selectedCar'],1);
+ before=requests.length;await run('setNightfall("test",{selectedCar:9})');assert.equal(requests.length,before);
+ await run('commandNightfall("test","start")');assert.equal(payload()['nightfall/control/selectedCar'],1);assert.equal(payload()['nightfall/control/command'],'start');assert.equal(payload()['scene/stop'],false);
+ await run('commandNightfall("test","recenter")');assert.equal(payload()['nightfall/control/command'],'recenter');assert.equal(payload()['scene/stop'],true,'recenter must stop travel');
+ assert.match(run('nightfallFeedback({updatedAt:Date.now(),stopped:true,inputPause:true},{})'),/Relax, then squeeze/);
+ assert.match(run('nightfallFeedback({updatedAt:Date.now(),stopped:true,inputPause:true},{stop:true})'),/STOP is active/);
+ run('render()');assert.equal(all(elements.users).some(el=>el.textContent==='Allow car selection (staff permission)'),false);
+ assert.ok(all(elements.users).some(el=>el.textContent==='Start selected car'));
  console.log('PASS: 21 scene mappings; online/offline guards; names; multipath stream updates; retained form drafts/focus; Nightfall fresh-session commands, Stop ordering and reported status; stress-ball validation; input pulses; presentation leases; request errors. No live Firebase requests sent.');
 })().catch(e=>{console.error(e);process.exitCode=1});
