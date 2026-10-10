@@ -20,6 +20,8 @@ function nightfallFeedback(status, control={}) {
   if (!freshStatus(status)) return 'Waiting for fresh headset status.';
   const messages={waiting_for_tracking:'Resume is waiting for tracking. Keep the headset on and the active controller in view.',resumed:'Resume accepted by headset.',expired:'Resume expired before tracking returned. Hold the active controller and press Resume again.',cancelled_by_stop:'Pending Resume cancelled by Stop or a controller/mode change.',cancelled:'Pending Resume cancelled.',superseded:'An updated command replaced the pending Resume.',reset_required:'Session finished. Use Reset to gallery before resuming.',blocked:'Resume blocked by the current mode or input state.',reset:'Gallery reset accepted.',finished:'Session finished.',stopped:'Stop accepted.'};
   const input=status.inputValid===false ? 'Input unavailable: '+(status.inputStatus||'waiting for tracking').replaceAll('_',' ')+'. ' : '';
+  if(control.stop===true) return input+'STOP is active. Resume showcase clears it with a fresh staff command.';
+  if(control.commandId && status.commandId===control.commandId && status.commandResult==='resumed' && status.stopped) return input+'Resume was accepted, but the headset paused again. Keep it on and the active controller in view, then Resume.';
   if(control.commandId && status.commandId===control.commandId) return input+(messages[status.commandResult]||status.commandResult||'Waiting for command result.');
   if(control.commandId && control.expiresAt<Date.now()) return input+'Last command expired. Keep the headset on, hold the active controller, then send a fresh Resume.';
   if(control.commandId) return input+'Command sent; waiting for the headset to report its result.';
