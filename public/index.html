@@ -85,6 +85,13 @@
     .card-user.ended { border-color: #5b3535; }
     .ended-note { margin-top: 8px; font-size: .72rem; color: var(--bad); }
 
+    .remote-panel { margin-top:16px; padding:14px; border:1px solid var(--border); border-radius:10px; }
+    .remote-panel h2 { font-size:1rem; margin:0 0 8px; }
+    .remote-panel p, .remote-panel output { display:block; color:var(--muted); font-size:.82rem; line-height:1.5; white-space:pre-line; }
+    .remote-panel label { display:block; margin:12px 0; font-size:.85rem; }
+    .remote-panel select, .remote-panel input[type=number] { display:block; width:100%; max-width:300px; padding:10px; margin-top:6px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; }
+    .remote-panel button { margin:5px 6px 5px 0; }
+    .remote-panel summary { cursor:pointer; font-weight:600; }
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
              background: #0b1220; border: 1px solid var(--border); color: var(--text); padding: 10px 16px;
              border-radius: 10px; font-size: .85rem; opacity: 0; pointer-events: none; transition: all .2s; }
@@ -113,6 +120,7 @@
 
   <div id="toast" class="toast"></div>
 
+  <script src="remote-controls.js"></script>
   <script>
     // ── CONFIG ──────────────────────────────────────────────────────────────
     const DB_URL = "https://immersivesmile-test-default-rtdb.asia-southeast1.firebasedatabase.app/";
@@ -137,7 +145,9 @@
       { id: 30, name: "LumiValley", label: "Lumi Valley · Pip Journey", group: "Experiences" },
       { id: 31, name: "spaceIsland", label: "Space Island", group: "Experiences" },
       { id: 32, name: "Scene_4_Solarland", label: "Solarland · Sun-Seed Airship", group: "Experiences" },
-      { id: 33, name: "Scene_SkyFerry", label: "Sky Ferry", group: "Experiences" },
+      { id: 33, name: "SinharajaSanctuary", label: "Sinharaja Rainforest", group: "Experiences" },
+      { id: 34, name: "Nightfall_Main", label: "Nightfall · Luxury Drive", group: "Experiences" },
+      { id: 35, name: "JustOneBiscuit", label: "Just One Biscuit", group: "Experiences" },
     ];
     const SCENE_GROUPS = ["Experiences", "Impossible Garden variants", "Classic scenes"];
     document.getElementById("sceneCount").textContent = SCENES.length + " scenes available";
@@ -214,6 +224,7 @@
     }
     function applyPut(env) {
       const parts = (env.path || "/").split("/").filter(Boolean);
+      if (parts.some(p => ["__proto__", "prototype", "constructor"].includes(p))) return;
       if (parts.length === 0) {
         state = (env.data && typeof env.data === "object") ? env.data : {};
       } else {
@@ -224,13 +235,17 @@
       }
     }
     function applyPatch(env) {
-      const parts = (env.path || "/").split("/").filter(Boolean);
-      const node = nodeAt(parts, true);
-      if (env.data && typeof env.data === "object") Object.assign(node, env.data);
+      for (const [key, value] of Object.entries(env.data || {})) {
+        applyPut({path: (env.path || "/").replace(/\/$/, "") + "/" + key, data: value});
+      }
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
     function render() {
+      const openPanels = new Set(Array.from(usersEl.querySelectorAll("details[id][open]")).map(el => el.id));
+      const focused = document.activeElement;
+      const focusId = focused?.id;
+      const selection = focused?.selectionStart;
       const ids = Object.keys(state).filter((id) => state[id] && typeof state[id] === "object");
       ids.sort((a, b) => Number(isOnline(b)) - Number(isOnline(a)) || num(state[b].lastSeen) - num(state[a].lastSeen));
       const online = ids.filter(isOnline), offline = ids.filter(id => !isOnline(id));
@@ -248,6 +263,12 @@
         offline.forEach(id => group.appendChild(card(id)));
         usersEl.appendChild(group);
       }
+      for (const panel of usersEl.querySelectorAll("details[id]")) panel.open = openPanels.has(panel.id);
+      if (focusId && focused !== document.activeElement) {
+        const next = document.getElementById(focusId);
+        next?.focus?.({preventScroll:true});
+        if (typeof selection === "number") next?.setSelectionRange?.(selection, selection);
+      }
     }
 
     function card(id) {
@@ -255,7 +276,7 @@
       const online = isOnline(id);
       const sceneId = u.scene && typeof u.scene.id === "number" ? u.scene.id : null;
       const segs = segmentsOf(u);
-      const stopped = stopOf(u);
+      const stopped = stopOf(u) || (isNightfall(u) && u.nightfall?.status?.stopped === true);
 
       const el = document.createElement("div");
       el.className = "card-user" + (online ? "" : " off") + (stopped ? " ended" : "");
@@ -281,6 +302,8 @@
       const selected = sceneById(sceneId);
       current.textContent = "Requested scene: " + (selected ? selected.label : sceneId === null ? "Not selected" : "Unknown scene (ID " + sceneId + ")");
       el.appendChild(current);
+      const reported = reportedScene(u);
+      if (reported) { const live = document.createElement("div"); live.className="current-scene"; live.textContent="Headset reports: " + (SCENES.find(s=>s.name===reported)?.label || reported); el.appendChild(live); }
 
       for (const group of SCENE_GROUPS) {
         const section = document.createElement("fieldset");
@@ -323,10 +346,8 @@
 
       const stopBtn = document.createElement("button");
       stopBtn.className = "seg-btn stop-btn" + (stopped ? " stopped" : "");
-      stopBtn.textContent = stopped ? "Resume" : "End";
-      stopBtn.title = stopped
-        ? "Start the loop again from the top"
-        : "Say goodbye, then hand the room back (passthrough)";
+      stopBtn.textContent = isNightfall(u) ? (stopped ? "Resume showcase" : "STOP") : stopped ? "Resume" : "End";
+      stopBtn.title = isNightfall(u) ? "Nightfall staff pause / resume" : "Request the current scene’s ending or resume";
       stopBtn.disabled = !online;
       stopBtn.addEventListener("click", () => setUserStop(id, !stopped));
       seg.appendChild(stopBtn);
@@ -336,10 +357,11 @@
       if (stopped) {
         const note = document.createElement("div");
         note.className = "ended-note";
-        note.textContent = "End requested — awaiting the headset farewell and passthrough.";
+        note.textContent = isNightfall(u) ? "Nightfall is paused. Hold the active controller, then use Resume showcase below. Driving still needs a fresh trigger press." : "End requested — the headset handles its scene-specific ending.";
         el.appendChild(note);
       }
 
+      appendRemoteControls(el, id);
       return el;
     }
 
@@ -354,60 +376,28 @@
     // PUT replaces the whole scene node, so the current segment count has to be
     // carried across or switching scene would silently reset the loop length.
     // stop is deliberately cleared instead: picking a scene means "play this now".
-    async function setUserScene(id, s) {
-      if (!requireOnline(id)) return;
-      const segments = segmentsOf(state[id]);
-      try {
-        const res = await fetch(base + "/users/" + id + "/scene.json", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: s.id, name: s.name, label: s.label, segments, stop: false, updatedAt: new Date().toISOString() }),
-        });
-        if (!res.ok) return toast("Failed: " + res.status, true);
-        (nodeAt([id], true)).scene = { id: s.id, segments, stop: false }; // optimistic; stream confirms
-        render();
-        toast("Sent " + s.label + " to " + displayName(state[id]) + " · " + id);
-      } catch {
-        toast("Network error", true);
-      }
+    function setUserScene(id, s) {
+      if (!SCENES.some(item=>item.id===s.id && item.name===s.name)) return Promise.resolve();
+      return remoteAction(id, async current => {
+        const scene = {id:s.id,name:s.name,label:s.label,segments:segmentsOf(state[id]),stop:false,updatedAt:new Date().toISOString()};
+        if (await patchRemote(id, {scene}, current)) toast("Requested " + s.label + " on " + displayName(state[id]));
+      }, true);
     }
 
-    // Ending is not a cut: the headset finishes the line being spoken, the farmer
-    // says goodbye, and only then does passthrough come up. Expect ~10s.
-    async function setUserStop(id, stop) {
-      if (!requireOnline(id)) return;
-      try {
-        const res = await fetch(base + "/users/" + id + "/scene.json", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stop, updatedAt: new Date().toISOString() }),
-        });
-        if (!res.ok) return toast("Failed: " + res.status, true);
-        (nodeAt([id, "scene"], true)).stop = stop; // optimistic; stream confirms
-        render();
-        toast(stop ? "Ending — goodbye then passthrough" : "Resumed");
-      } catch {
-        toast("Network error", true);
-      }
+    function setUserStop(id, stop) {
+      if (isNightfall(state[id])) return stop ? stopNightfall(id) : commandNightfall(id, "resume");
+      return remoteAction(id, async current => {
+        if (await patchRemote(id, {"scene/stop":stop,"scene/updatedAt":new Date().toISOString()}, current))
+          toast(stop ? "End requested — the headset handles its scene-specific ending." : "Resume requested");
+      }, stop);
     }
 
-    // PATCH, so the scene selection underneath is left alone. The headset picks
-    // this up on its open stream and applies it at the end of the current lap.
-    async function setUserSegments(id, n) {
-      if (!requireOnline(id)) return;
-      try {
-        const res = await fetch(base + "/users/" + id + "/scene.json", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ segments: n, updatedAt: new Date().toISOString() }),
-        });
-        if (!res.ok) return toast("Failed: " + res.status, true);
-        (nodeAt([id, "scene"], true)).segments = n; // optimistic; stream confirms
-        render();
-        toast(n + " segment" + (n === 1 ? "" : "s") + " · " + (SEGMENTS.find((s) => s.n === n) || {}).label);
-      } catch {
-        toast("Network error", true);
-      }
+    function setUserSegments(id, n) {
+      if (!SEGMENTS.some(s=>s.n===n)) return Promise.resolve();
+      return remoteAction(id, async current => {
+        if (await patchRemote(id, {"scene/segments":n,"scene/updatedAt":new Date().toISOString()}, current))
+          toast(n + " segment" + (n === 1 ? "" : "s") + " requested");
+      });
     }
 
     // The custom name is stored in its own key, /users/{id}/label. The headset writes
