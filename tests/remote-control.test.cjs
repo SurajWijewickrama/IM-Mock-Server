@@ -67,6 +67,9 @@ function nightfall(){
  assert.equal(run('state.test.nightfall.control.selectionEnabled'),true);assert.equal(run('state.test.scene.stop'),undefined);
  run('applyPatch({path:"/test",data:JSON.parse(\'{"__proto__/polluted":true}\')})');assert.equal(run('({}).polluted'),undefined);
  nightfall();
+ assert.match(run('nightfallFeedback({updatedAt:Date.now(),inputValid:false,inputStatus:"left_input_not_tracked",commandId:"r",commandResult:"waiting_for_tracking"},{commandId:"r"})'),/waiting for tracking/);
+ assert.match(run('nightfallFeedback({updatedAt:Date.now(),commandId:"r",commandResult:"expired"},{commandId:"r"})'),/expired/);
+ assert.match(run('nightfallFeedback({updatedAt:Date.now(),inputValid:true,commandId:"r",commandResult:"resumed"},{commandId:"r"})'),/accepted/);
  const panel=doc.getElementById('remote-test-ball-panel');panel.open=true;
  const diameter=doc.getElementById('remote-test-diameter');diameter.value='7.2';diameter.events.input();diameter.focus();run('render()');
  assert.equal(doc.getElementById('remote-test-ball-panel').open,true,'stream refresh retains expanded panel');

@@ -16,6 +16,15 @@ function nightfallReady(id) {
   const s=state[id]?.nightfall?.status;
   return isOnline(id) && isNightfall(state[id]) && freshStatus(s) && s.ready === true && !!s.bootId;
 }
+function nightfallFeedback(status, control={}) {
+  if (!freshStatus(status)) return 'Waiting for fresh headset status.';
+  const messages={waiting_for_tracking:'Resume is waiting for tracking. Keep the headset on and the active controller in view.',resumed:'Resume accepted by headset.',expired:'Resume expired before tracking returned. Hold the active controller and press Resume again.',cancelled_by_stop:'Pending Resume cancelled by Stop or a controller/mode change.',cancelled:'Pending Resume cancelled.',superseded:'An updated command replaced the pending Resume.',reset_required:'Session finished. Use Reset to gallery before resuming.',blocked:'Resume blocked by the current mode or input state.',reset:'Gallery reset accepted.',finished:'Session finished.',stopped:'Stop accepted.'};
+  const input=status.inputValid===false ? 'Input unavailable: '+(status.inputStatus||'waiting for tracking').replaceAll('_',' ')+'. ' : '';
+  if(control.commandId && status.commandId===control.commandId) return input+(messages[status.commandResult]||status.commandResult||'Waiting for command result.');
+  if(control.commandId && control.expiresAt<Date.now()) return input+'Last command expired. Keep the headset on, hold the active controller, then send a fresh Resume.';
+  if(control.commandId) return input+'Command sent; waiting for the headset to report its result.';
+  return input+(status.inputValid===undefined?'This APK does not report input/Resume results. Install the updated build for tracking feedback.':'No staff command pending.');
+}
 function remoteId() { return crypto.randomUUID(); }
 async function remoteRequest(id, path, method='GET', body) {
   const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),8000);
@@ -88,7 +97,7 @@ function commandNightfall(id, command) {
     // stops the session, so clear that transport latch while retaining scene Stop.
     if(command==='finish') {paths['nightfall/control/stop']=false;paths['scene/stop']=true;}
     if(command!=='resume') paths['nightfall/control/selectionEnabled']=false;
-    if(await patchRemote(id,paths,current)) toast(command==='resume'?'Resume sent. Hold the active controller; a fresh trigger press starts the drive.':command==='reset'?'Reset sent. Enable car selection again when ready.':'Finish sent.');
+    if(await patchRemote(id,paths,current)) toast(command==='resume'?'Resume requested. Keep the headset on and hold the active controller; check the headset result.':command==='reset'?'Reset sent. Enable car selection again when ready.':'Finish sent.');
   });
 }
 function saveBall(id, values) {
@@ -146,6 +155,8 @@ function appendRemoteControls(parent,id) {
     panel.appendChild(remoteElement('h2','Nightfall · Car gallery & drive'));
     panel.appendChild(remoteElement('p','1. Enable car selection. 2. Hold the active controller and Resume showcase. 3. Point at a car/name and tap trigger; press again in the cabin to drive.'));
     panel.appendChild(remoteElement('output',ready?`${s.car}\n${s.beat} · ${s.stopped?'PAUSED':s.travelling?'Driving':'Parked'} · ${fmt(s.distance)} m\nSelection ${s.selectionEnabled?'enabled':'disabled'} on headset · ${s.hand} controller`:'Waiting for live Nightfall status. Open Nightfall on this headset.'));
+    panel.appendChild(remoteElement('p',nightfallFeedback(s,c)));
+    if(s?.buildSceneCount===1) panel.appendChild(remoteElement('p','Nightfall-only test APK: install the full APK to open the other scenes.'));
     remoteButton(panel,'STOP',online,()=>stopNightfall(id),true);
     remoteField(panel,id,'selection','Allow car selection (staff permission)',!!c.selectionEnabled,null,v=>setNightfall(id,{selectionEnabled:v}),!ready);
     remoteField(panel,id,'hand','Active controller',c.activeHand||'right',[['right','Right'],['left','Left']],v=>setNightfall(id,{activeHand:v}),!ready);

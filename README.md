@@ -41,7 +41,7 @@ Scene selection preserves loop segments and clears the scene stop flag. Segment 
 3. Hold that controller in tracking view. If paused, click **Resume showcase**. Check that the headset reports selection enabled and is no longer paused.
 4. In VR, point at a car or its name until the gold strip highlights, then tap the index trigger. After entering the cabin, release and press the trigger again to drive.
 
-**STOP** pauses and revokes selection permission. Switching hand or entering Procedure mode also pauses; returning to Showcase does not automatically resume. Enable selection again and Resume when ready. A Resume rejected while the controller is untracked needs another explicit Resume after tracking returns.
+**STOP** pauses and revokes selection permission. Switching hand or entering Procedure mode also pauses; returning to Showcase does not automatically resume. Enable selection again and Resume when ready. The updated app keeps an explicit Resume request pending for up to 15 seconds while tracking returns. It never starts the car automatically. Stop, controller/mode changes, disconnect and expiry cancel the pending request. The dashboard shows waiting, accepted, cancelled or expired results. Older APKs consume Resume immediately; install the updated APK to get this behavior.
 
 **Reset to gallery** resets the session and disables selection until staff enable it again. **Finish session** invokes the app's ending. Mute applies to Nightfall audio. The selected car, scene beat, distance, active hand and pause/selection state are headset reports, not assumed command results.
 
