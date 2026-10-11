@@ -14,7 +14,7 @@ function reportedScene(u) {
 function isNightfall(u) { const scene=reportedScene(u); return scene ? scene === 'Nightfall_Main' : u?.scene?.id === 34; }
 function nightfallReady(id) {
   const s=state[id]?.nightfall?.status;
-  return isOnline(id) && isNightfall(state[id]) && freshStatus(s) && s.ready === true && !!s.bootId;
+  return canControl(id) && isNightfall(state[id]) && freshStatus(s) && s.ready === true && !!s.bootId;
 }
 function nightfallFeedback(status, control={}) {
   if (!freshStatus(status)) return 'Waiting for fresh headset status.';
@@ -163,7 +163,7 @@ function remoteField(parent,id,key,label,value,options,onChange,disabled=false) 
 }
 function draftFor(id,kind,defaults) {const key=id+':'+kind;if(!remoteDrafts.has(key))remoteDrafts.set(key,{...defaults});return remoteDrafts.get(key);}
 function appendRemoteControls(parent,id) {
-  const u=state[id], online=isOnline(id);
+  const u=state[id], online=canControl(id);
   if(isNightfall(u) || u.scene?.id===34) {
     const panel=remoteElement('section',undefined,'remote-panel'),s=u.nightfall?.status,c=u.nightfall?.control||{},ready=nightfallReady(id);
     panel.appendChild(remoteElement('h2','Nightfall · Seated luxury drive'));

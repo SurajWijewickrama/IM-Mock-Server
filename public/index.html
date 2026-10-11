@@ -50,6 +50,13 @@
     .u-edit { background: transparent; border: 0; color: var(--muted); font-size: .85rem; cursor: pointer; padding: 0 5px; border-radius: 6px; }
     .u-edit:hover { color: var(--accent); }
     .u-sub { color: var(--muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .u-identity { margin-top: 8px; color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
+    .u-identity strong { color: var(--text); font-weight: 500; user-select: all; }
+    .battery { margin-top: 8px; font-size: .85rem; color: var(--ok); }
+    .battery.low { color: var(--warn); }
+    .battery.unknown, .battery.stale { color: var(--muted); }
+    .device-search { display: block; margin: 18px 0 8px; color: var(--muted); font-size: .8rem; }
+    .device-search input { display: block; width: 100%; margin-top: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); font: inherit; }
     .u-input { text-align: right; font-size: .68rem; color: var(--muted); line-height: 1.25; }
     .u-input b { color: var(--accent); font-size: 1.05rem; }
     .u-x { background: transparent; border: 0; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
@@ -114,6 +121,9 @@
       <code>YOUR_PROJECT-default-rtdb.firebaseio.com</code> in the <code>DB_URL</code> constant.
     </div>
 
+    <label class="device-search" for="deviceSearch">Find a headset
+      <input id="deviceSearch" type="search" placeholder="Device UID, headset name or Firebase record ID" autocomplete="off" />
+    </label>
     <div id="users"></div>
     <div id="empty" class="empty" style="display:none">No headsets connected yet. Launch the app on a device.</div>
   </div>
@@ -174,6 +184,7 @@
     const statusText = document.getElementById("statusText");
     const toastEl = document.getElementById("toast");
     const banner = document.getElementById("banner");
+    const deviceSearch = document.getElementById("deviceSearch");
 
     let state = {};                 // mirror of /users
     let pollTimer = null;
@@ -200,6 +211,37 @@
       return Number.isFinite(timestamp) ? Math.max(0, Date.now() - timestamp) : Infinity;
     }
     function isOnline(id) { return heartbeatAge(state[id]) < OFFLINE_MS; }
+    function deviceUid(u) {
+      const uid = typeof u?.deviceUid === "string" ? u.deviceUid.trim().toLowerCase() : "";
+      return (!u?.deviceUidSource || u.deviceUidSource === "android_id") && /^[a-f0-9]{1,16}$/.test(uid)
+        && !/^0+$/.test(uid) && uid !== "9774d56d682e549c" ? uid : "";
+    }
+    // Group only actual Android UIDs. Missing IDs and installation fallbacks are not shared identities.
+    function deviceRecords() {
+      const groups = new Map();
+      for (const id of Object.keys(state)) {
+        const u = state[id];
+        if (!u || typeof u !== "object" || Array.isArray(u)) continue;
+        const uid = deviceUid(u), key = uid ? "uid:" + uid : "node:" + id;
+        if (!groups.has(key)) groups.set(key, {uid, ids:[]});
+        groups.get(key).ids.push(id);
+      }
+      return [...groups.values()].map(record => {
+        record.ids.sort((a,b) => heartbeatAge(state[a]) - heartbeatAge(state[b]) || a.localeCompare(b));
+        return {...record, id:record.ids[0], conflict:record.ids.filter(isOnline).length > 1};
+      }).sort((a,b) => Number(isOnline(b.id)) - Number(isOnline(a.id)) || heartbeatAge(state[a.id]) - heartbeatAge(state[b.id]));
+    }
+    function canControl(id) {
+      if (!isOnline(id)) return false;
+      const record = deviceRecords().find(record => record.ids.includes(id));
+      return !!record && record.id === id && !record.conflict;
+    }
+    function batteryInfo(u) {
+      const value = u?.batteryPercentage;
+      if (!Number.isInteger(value) || value < 0 || value > 100) return {text:"Battery unavailable", className:"unknown"};
+      if (heartbeatAge(u) >= OFFLINE_MS) return {text:"Battery " + value + "% · last reported (stale)", className:"stale"};
+      return {text:"Battery " + value + "%" + (value <= 20 ? " · low" : ""), className:value <= 20 ? "low" : ""};
+    }
     function lastSeenLabel(u) {
       const age = heartbeatAge(u);
       if (!Number.isFinite(age)) return "No heartbeat received";
@@ -209,8 +251,9 @@
       return "Offline / asleep · last seen " + Math.floor(age / 3600000) + "h ago";
     }
     function requireOnline(id) {
-      if (isOnline(id)) return true;
-      toast("This headset is offline or asleep. Put it on and open the app first.", true);
+      if (canControl(id)) return true;
+      toast(isOnline(id) ? "Multiple active records share this device UID. Resolve the duplicate connection before sending controls."
+        : "This headset is offline or asleep. Put it on and open the app first.", true);
       render();
       return false;
     }
@@ -246,21 +289,23 @@
       const focused = document.activeElement;
       const focusId = focused?.id;
       const selection = focused?.selectionStart;
-      const ids = Object.keys(state).filter((id) => state[id] && typeof state[id] === "object");
-      ids.sort((a, b) => Number(isOnline(b)) - Number(isOnline(a)) || num(state[b].lastSeen) - num(state[a].lastSeen));
-      const online = ids.filter(isOnline), offline = ids.filter(id => !isOnline(id));
-      emptyEl.style.display = online.length ? "none" : "block";
-      emptyEl.textContent = "No active headsets. Put on the Quest and open ImmersiveSmile to connect.";
+      const query = (deviceSearch.value || "").trim().toLowerCase();
+      const records = deviceRecords().filter(record => !query || record.ids.some(id =>
+        [id, state[id].deviceUid, state[id].staticDeviceId, state[id].label, state[id].name]
+          .some(value => typeof value === "string" && value.toLowerCase().includes(query))));
+      const online = records.filter(record => isOnline(record.id)), offline = records.filter(record => !isOnline(record.id));
+      emptyEl.style.display = online.length || (query && records.length) ? "none" : "block";
+      emptyEl.textContent = query && !records.length ? "No headsets match your search." : "No active headsets. Put on the Quest and open ImmersiveSmile to connect.";
       const expanded = usersEl.querySelector(".offline-list")?.open || false;
       usersEl.innerHTML = "";
-      online.forEach(id => usersEl.appendChild(card(id)));
+      online.forEach(record => usersEl.appendChild(card(record.id, record)));
       if (offline.length) {
         const group = document.createElement("details");
-        group.className = "offline-list"; group.open = expanded;
+        group.className = "offline-list"; group.open = expanded || !!query;
         const summary = document.createElement("summary");
         summary.textContent = offline.length + " offline / saved devices";
         group.appendChild(summary);
-        offline.forEach(id => group.appendChild(card(id)));
+        offline.forEach(record => group.appendChild(card(record.id, record)));
         usersEl.appendChild(group);
       }
       for (const panel of usersEl.querySelectorAll("details[id]")) panel.open = openPanels.has(panel.id);
@@ -271,9 +316,10 @@
       }
     }
 
-    function card(id) {
+    function card(id, record = deviceRecords().find(record => record.ids.includes(id))) {
       const u = state[id] || {};
       const online = isOnline(id);
+      const controllable = canControl(id);
       const sceneId = u.scene && typeof u.scene.id === "number" ? u.scene.id : null;
       const segs = segmentsOf(u);
       const stopped = stopOf(u) || (isNightfall(u) && u.nightfall?.status?.stopped === true);
@@ -287,7 +333,7 @@
         '<span class="u-dot ' + (online ? "on" : "off") + '"></span>' +
         '<div class="u-id"><div class="u-name">' + esc(displayName(u)) +
         ' <button class="u-edit" title="Rename this headset" aria-label="Rename this headset">✎</button></div>' +
-        '<div class="u-sub">' + (u.label && u.name ? esc(u.name) + ' &middot; ' : '') + esc(lastSeenLabel(u)) + ' &middot; ID ' + esc(id) + '</div></div>' +
+        '<div class="u-sub">' + (u.label && u.name ? esc(u.name) + ' &middot; ' : '') + esc(lastSeenLabel(u)) + '</div></div>' +
         '<div class="u-input">BLE input<br><b>' + fmt(u.input) + '</b></div>' +
         '<button class="u-x" title="Remove user">✕</button>';
       head.querySelector(".u-x").addEventListener("click", () => removeUser(id));
@@ -296,6 +342,32 @@
         if (next !== null) renameUser(id, next);
       });
       el.appendChild(head);
+
+      const identity = document.createElement("div");
+      identity.className = "u-identity";
+      identity.innerHTML = record?.uid ? 'Device UID · <strong>' + esc(u.deviceUid) + '</strong>' : 'Device UID unavailable · awaiting a compatible headset report';
+      el.appendChild(identity);
+      const battery = batteryInfo(u), batteryEl = document.createElement("div");
+      batteryEl.className = "battery " + battery.className;
+      batteryEl.textContent = battery.text;
+      el.appendChild(batteryEl);
+      const details = document.createElement("details");
+      details.className = "u-identity"; details.id = "device-" + id + "-details";
+      const summary = document.createElement("summary"); summary.textContent = "Device record details"; details.appendChild(summary);
+      const metadata = document.createElement("div");
+      metadata.textContent = "Current Firebase record: " + id + (u.staticDeviceId ? " · Additional app ID: " + u.staticDeviceId : "");
+      details.appendChild(metadata);
+      if (record?.ids.length > 1) {
+        const history = document.createElement("div");
+        history.textContent = "Other records for this UID: " + record.ids.filter(other => other !== id).join(", ");
+        details.appendChild(history);
+      }
+      el.appendChild(details);
+      if (record?.conflict) {
+        const warning = document.createElement("div"); warning.className = "connection-note";
+        warning.textContent = "Multiple active records report this UID. Controls are disabled until only one connection remains active.";
+        el.appendChild(warning);
+      }
 
       const current = document.createElement("div");
       current.className = "current-scene";
@@ -320,7 +392,7 @@
           b.textContent = s.label;
           b.title = s.name + " · ID " + s.id;
           b.setAttribute("aria-pressed", String(s.id === sceneId));
-          b.disabled = !online;
+          b.disabled = !controllable;
           b.addEventListener("click", () => setUserScene(id, s));
           row.appendChild(b);
         }
@@ -339,7 +411,7 @@
         b.className = "seg-btn" + (s.n === segs ? " active" : "");
         b.textContent = s.label;
         b.title = s.n + " x 30s segment" + (s.n === 1 ? "" : "s");
-        b.disabled = !online;
+        b.disabled = !controllable;
         b.addEventListener("click", () => setUserSegments(id, s.n));
         seg.appendChild(b);
       }
@@ -348,7 +420,7 @@
       stopBtn.className = "seg-btn stop-btn" + (stopped ? " stopped" : "");
       stopBtn.textContent = isNightfall(u) ? (stopped ? "Resume showcase" : "STOP") : stopped ? "Resume" : "End";
       stopBtn.title = isNightfall(u) ? "Nightfall staff pause / resume" : "Request the current scene’s ending or resume";
-      stopBtn.disabled = !online;
+      stopBtn.disabled = !controllable;
       stopBtn.addEventListener("click", () => setUserStop(id, !stopped));
       seg.appendChild(stopBtn);
 
@@ -469,6 +541,7 @@
       setInterval(render, 2000); // refresh online/offline state over time
     }
 
+    deviceSearch.addEventListener("input", render);
     init();
   </script>
 </body>

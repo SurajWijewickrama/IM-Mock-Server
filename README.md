@@ -1,6 +1,35 @@
 # ImmersiveSmile remote control
 
-Static dashboard in `public/index.html` and `public/remote-controls.js`, connected to the existing ImmersiveSmile Firebase Realtime Database. Synchronized with the Unity source on 10 October 2026.
+Static dashboard in `public/index.html` and `public/remote-controls.js`, connected to the existing ImmersiveSmile Firebase Realtime Database. Synchronized with the Unity source on 11 October 2026, including original Android device UID and battery reports.
+
+## Device identity and battery
+
+Each card shows the original Android `deviceUid` and the latest `batteryPercentage`.
+Battery is a whole-number percentage (0–100); 20% or below is marked low. Missing,
+`-1` or invalid values show **Battery unavailable**. Offline readings are explicitly
+marked **last reported (stale)**. The dashboard reads these headset-owned fields;
+it never generates UIDs, guesses charge levels or writes battery values.
+
+Search by UID, headset name, staff label, additional app ID or Firebase record ID.
+Records with the same valid Android UID appear as one headset card, using the most
+recent heartbeat. This keeps old installation records from appearing as separate
+headsets after a reinstall. Device record details retain the current Firebase key,
+the compatible hashed `staticDeviceId`, and other keys for that UID. No records
+are automatically deleted, renamed or migrated. Labels remain attached to their
+existing installation records.
+
+Controls always write to `/users/{currentFirebaseKey}`, never `/users/{deviceUid}`.
+If more than one record for the same UID has a fresh heartbeat, all controls for
+that device are disabled until the conflict clears. Guards run again immediately
+before writes, including after asynchronous status reads. Older APKs, empty UIDs,
+and explicitly unavailable UIDs remain separate records with the existing controls.
+The hashed app ID is shown only in record details; it is not presented as an
+original Android UID.
+
+The UID is Android's app-signing-key/user/device-scoped `ANDROID_ID`, not a hardware
+serial number. Restarting does not change it; factory reset, Android user or APK
+signing-key changes can. The headset must run the updated Unity APK before these
+fields appear. New fields require no changes to this repository's Firebase rules.
 
 ## Scene catalog
 
@@ -75,6 +104,10 @@ All paths are relative to `/users/{deviceId}`. Opening the dashboard sends no co
 | `telemetry` | Read-only app boot, scene, sequence and adaptive acknowledgement |
 | `adaptive` | Version 1 command bound to the current boot, scene and telemetry sequence; expires in five seconds |
 | `label` | Staff-defined headset name |
+| `deviceUid` / `deviceUidSource` | Read-only original Android UID and `android_id` provenance; empty/`unavailable` when not reported |
+| `staticDeviceId` / `staticDeviceIdSource` | Read-only compatible hashed identity or installation fallback |
+| `batteryPercentage` | Read-only headset battery, integer 0–100 or -1 when unavailable |
+| `lastSeen` | Headset heartbeat timestamp; controls and battery freshness expire after 15 seconds |
 
 Nightfall commands fetch current status before writing, carry a unique command ID, and expire after 15 seconds. Commands for each device are ordered; Stop cancels older queued commands. A sent command never overwrites reported headset state. Firebase multipath updates are handled in the local stream mirror. Database access rules are unchanged.
 
@@ -89,6 +122,6 @@ python3 -m http.server 8080 --bind 127.0.0.1 --directory public
 
 Open `http://127.0.0.1:8080`. This local dashboard connects to the configured Firebase project, so clicking an enabled control operates that headset.
 
-The automated suite uses mocked Firebase responses: it covers all scene buttons, offline guards, session freshness, Stop ordering, settings validation, multipath updates, form retention and command errors. It does not send live Firebase commands or establish physical controller playback. The scene catalog was separately compared against Unity's `SceneSelector.cs` and enabled build settings.
+The automated suite uses mocked Firebase responses: it covers all scene buttons, offline guards, session freshness, Stop ordering, settings validation, multipath updates, form retention and command errors. It also covers UID grouping/search, latest-record routing, duplicate-UID conflicts during asynchronous commands, legacy records, and battery updates/low/unknown/stale states. It does not send live Firebase commands or establish physical controller playback. The scene catalog was separately compared against Unity's `SceneSelector.cs` and enabled build settings.
 
 Changes are local until deployed. The existing GitHub Pages workflow publishes `public/` on pushes to main/master; Firebase Hosting also points at that folder. Deploy both `index.html` and `remote-controls.js` together. The Pages workflow runs the regression suite before publishing.
