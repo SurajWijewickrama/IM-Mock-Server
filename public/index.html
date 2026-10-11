@@ -1,548 +1,1223 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f172a" />
-  <title>Scene Control — ImmersiveSmilePlus VR</title>
-  <style>
-    :root {
-      --bg: #0f172a; --panel: #1e293b; --panel-2: #273449;
-      --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
-      --ok: #22c55e; --bad: #ef4444; --warn: #f59e0b; --border: #334155;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
-    }
-    .wrap { max-width: 760px; margin: 0 auto; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 0 8px; }
-    h1 { font-size: 1.15rem; margin: 0; font-weight: 650; }
-    .sub { color: var(--muted); font-size: .8rem; margin-top: 2px; }
-    .status { display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); white-space: nowrap; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: background .2s; }
-    .dot.live { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
-    .dot.poll { background: var(--warn); }
-    .dot.down { background: var(--bad); }
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Scene Control — ImmersiveSmilePlus VR</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #1e293b;
+        --panel-2: #273449;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #38bdf8;
+        --ok: #22c55e;
+        --bad: #ef4444;
+        --warn: #f59e0b;
+        --border: #334155;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        padding: env(safe-area-inset-top) 16px
+          calc(env(safe-area-inset-bottom) + 16px);
+      }
+      .wrap {
+        max-width: 760px;
+        margin: 0 auto;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 20px 0 8px;
+      }
+      h1 {
+        font-size: 1.15rem;
+        margin: 0;
+        font-weight: 650;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 0.8rem;
+        margin-top: 2px;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.8rem;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--muted);
+        transition: background 0.2s;
+      }
+      .dot.live {
+        background: var(--ok);
+        box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
+      }
+      .dot.poll {
+        background: var(--warn);
+      }
+      .dot.down {
+        background: var(--bad);
+      }
 
-    .banner { margin-top: 14px; padding: 12px 14px; border-radius: 12px; font-size: .85rem; display: none; }
-    .banner.show { display: block; }
-    .banner.err { background: rgba(239,68,68,.12); border: 1px solid var(--bad); color: #fecaca; }
-    .banner code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 5px; }
+      .banner {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        display: none;
+      }
+      .banner.show {
+        display: block;
+      }
+      .banner.err {
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid var(--bad);
+        color: #fecaca;
+      }
+      .banner code {
+        background: rgba(255, 255, 255, 0.08);
+        padding: 1px 6px;
+        border-radius: 5px;
+      }
 
-    .empty { margin-top: 28px; text-align: center; color: var(--muted); font-size: .9rem; }
+      .empty {
+        margin-top: 28px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
 
-    .card-user { margin-top: 14px; background: var(--panel); border: 1px solid var(--border);
-                 border-radius: 14px; padding: 14px 16px; transition: opacity .2s; }
-    .card-user.off { opacity: .7; }
-    button:disabled { opacity: .4; cursor: not-allowed; }
-    .offline-list { margin-top: 24px; color: var(--muted); }
-    .offline-list summary { padding: 14px 0; cursor: pointer; }
-    .connection-note { margin-top: 10px; font-size: .8rem; color: var(--warn); }
-    .u-head { display: flex; align-items: center; gap: 12px; }
-    .u-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; background: var(--muted); }
-    .u-dot.on { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
-    .u-dot.off { background: var(--bad); }
-    .u-id { flex: 1; min-width: 0; }
-    .u-name { font-weight: 650; font-size: 1rem; }
-    .u-edit { background: transparent; border: 0; color: var(--muted); font-size: .85rem; cursor: pointer; padding: 0 5px; border-radius: 6px; }
-    .u-edit:hover { color: var(--accent); }
-    .u-sub { color: var(--muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .u-identity { margin-top: 8px; color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
-    .u-identity strong { color: var(--text); font-weight: 500; user-select: all; }
-    .battery { margin-top: 8px; font-size: .85rem; color: var(--ok); }
-    .battery.low { color: var(--warn); }
-    .battery.unknown, .battery.stale { color: var(--muted); }
-    .device-search { display: block; margin: 18px 0 8px; color: var(--muted); font-size: .8rem; }
-    .device-search input { display: block; width: 100%; margin-top: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); font: inherit; }
-    .u-input { text-align: right; font-size: .68rem; color: var(--muted); line-height: 1.25; }
-    .u-input b { color: var(--accent); font-size: 1.05rem; }
-    .u-x { background: transparent; border: 0; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
-    .u-x:hover { color: var(--bad); background: rgba(239,68,68,.1); }
+      .card-user {
+        margin-top: 14px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px 16px;
+        transition: opacity 0.2s;
+      }
+      .card-user.off {
+        opacity: 0.7;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .offline-list {
+        margin-top: 24px;
+        color: var(--muted);
+      }
+      .offline-list summary {
+        padding: 14px 0;
+        cursor: pointer;
+      }
+      .connection-note {
+        margin-top: 10px;
+        font-size: 0.8rem;
+        color: var(--warn);
+      }
+      .u-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .u-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        flex: none;
+        background: var(--muted);
+      }
+      .u-dot.on {
+        background: var(--ok);
+        box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
+      }
+      .u-dot.off {
+        background: var(--bad);
+      }
+      .u-id {
+        flex: 1;
+        min-width: 0;
+      }
+      .u-name {
+        font-weight: 650;
+        font-size: 1rem;
+      }
+      .u-edit {
+        background: transparent;
+        border: 0;
+        color: var(--muted);
+        font-size: 0.85rem;
+        cursor: pointer;
+        padding: 0 5px;
+        border-radius: 6px;
+      }
+      .u-edit:hover {
+        color: var(--accent);
+      }
+      .u-sub {
+        color: var(--muted);
+        font-size: 0.72rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .u-identity {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        overflow-wrap: anywhere;
+      }
+      .u-identity strong {
+        color: var(--text);
+        font-weight: 500;
+        user-select: all;
+      }
+      .battery {
+        margin-top: 8px;
+        font-size: 0.85rem;
+        color: var(--ok);
+      }
+      .battery.low {
+        color: var(--warn);
+      }
+      .battery.unknown,
+      .battery.stale {
+        color: var(--muted);
+      }
+      .device-search {
+        display: block;
+        margin: 18px 0 8px;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .device-search input {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+      }
+      .u-input {
+        text-align: right;
+        font-size: 0.68rem;
+        color: var(--muted);
+        line-height: 1.25;
+      }
+      .u-input b {
+        color: var(--accent);
+        font-size: 1.05rem;
+      }
+      .u-x {
+        background: transparent;
+        border: 0;
+        color: var(--muted);
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      .u-x:hover {
+        color: var(--bad);
+        background: rgba(239, 68, 68, 0.1);
+      }
 
-    .scene-group { margin: 14px 0 0; padding: 0; border: 0; min-width: 0; }
-    .scene-group legend, .current-scene { color: var(--muted); font-size: .78rem; }
-    .current-scene { margin-top: 12px; }
-    .s-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-    .s-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .s-btn { appearance: none; cursor: pointer; background: var(--panel-2); color: var(--text);
-             border: 2px solid var(--border); border-radius: 10px; min-height: 44px; padding: 8px 12px; font-size: .85rem;
-             transition: transform .06s, border-color .15s, background .15s; }
-    .s-btn:hover { background: #324155; }
-    .s-btn:active { transform: scale(.96); }
-    .s-btn.active { border-color: var(--accent); background: linear-gradient(180deg, #0b3b52, #0c2c40); color: var(--accent); }
+      .scene-group {
+        margin: 14px 0 0;
+        padding: 0;
+        border: 0;
+        min-width: 0;
+      }
+      .scene-group legend,
+      .current-scene {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+      .current-scene {
+        margin-top: 12px;
+      }
+      .s-btn:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .s-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .s-btn {
+        appearance: none;
+        cursor: pointer;
+        background: var(--panel-2);
+        color: var(--text);
+        border: 2px solid var(--border);
+        border-radius: 10px;
+        min-height: 44px;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        transition:
+          transform 0.06s,
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .s-btn:hover {
+        background: #324155;
+      }
+      .s-btn:active {
+        transform: scale(0.96);
+      }
+      .s-btn.active {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, #0b3b52, #0c2c40);
+        color: var(--accent);
+      }
 
-    .seg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px;
-           padding-top: 12px; border-top: 1px solid var(--border); }
-    .seg-label { font-size: .72rem; color: var(--muted); flex: 1; }
-    .seg-label b { color: var(--text); font-weight: 600; }
-    .seg-btn { appearance: none; cursor: pointer; background: var(--panel-2); color: var(--text);
-               border: 2px solid var(--border); border-radius: 8px; padding: 6px 10px;
-               font-size: .78rem; line-height: 1; min-width: 62px;
-               transition: transform .06s, border-color .15s, background .15s; }
-    .seg-btn:hover { background: #324155; }
-    .seg-btn:active { transform: scale(.96); }
-    .seg-btn.active { border-color: var(--accent); background: linear-gradient(180deg, #0b3b52, #0c2c40); color: var(--accent); }
+      .seg {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .seg-label {
+        font-size: 0.72rem;
+        color: var(--muted);
+        flex: 1;
+      }
+      .seg-label b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .seg-btn {
+        appearance: none;
+        cursor: pointer;
+        background: var(--panel-2);
+        color: var(--text);
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 0.78rem;
+        line-height: 1;
+        min-width: 62px;
+        transition:
+          transform 0.06s,
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .seg-btn:hover {
+        background: #324155;
+      }
+      .seg-btn:active {
+        transform: scale(0.96);
+      }
+      .seg-btn.active {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, #0b3b52, #0c2c40);
+        color: var(--accent);
+      }
 
-    .stop-btn { margin-left: 6px; border-color: #5b3535; color: #fecaca; }
-    .stop-btn:hover { background: rgba(239,68,68,.14); }
-    .stop-btn.stopped { border-color: var(--bad); background: rgba(239,68,68,.16); color: #fecaca; }
-    .card-user.ended { border-color: #5b3535; }
-    .ended-note { margin-top: 8px; font-size: .72rem; color: var(--bad); }
+      .stop-btn {
+        margin-left: 6px;
+        border-color: #5b3535;
+        color: #fecaca;
+      }
+      .stop-btn:hover {
+        background: rgba(239, 68, 68, 0.14);
+      }
+      .stop-btn.stopped {
+        border-color: var(--bad);
+        background: rgba(239, 68, 68, 0.16);
+        color: #fecaca;
+      }
+      .card-user.ended {
+        border-color: #5b3535;
+      }
+      .ended-note {
+        margin-top: 8px;
+        font-size: 0.72rem;
+        color: var(--bad);
+      }
 
-    .remote-panel { margin-top:16px; padding:14px; border:1px solid var(--border); border-radius:10px; }
-    .remote-panel h2 { font-size:1rem; margin:0 0 8px; }
-    .remote-panel p, .remote-panel output { display:block; color:var(--muted); font-size:.82rem; line-height:1.5; white-space:pre-line; }
-    .remote-panel label { display:block; margin:12px 0; font-size:.85rem; }
-    .remote-panel select, .remote-panel input[type=number] { display:block; width:100%; max-width:300px; padding:10px; margin-top:6px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; }
-    .remote-panel button { margin:5px 6px 5px 0; }
-    .remote-panel summary { cursor:pointer; font-weight:600; }
-    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
-             background: #0b1220; border: 1px solid var(--border); color: var(--text); padding: 10px 16px;
-             border-radius: 10px; font-size: .85rem; opacity: 0; pointer-events: none; transition: all .2s; }
-    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-    .toast.err { border-color: var(--bad); }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <header>
-      <div>
-        <h1>Scene Control</h1>
-        <div class="sub">ImmersiveSmilePlus VR &middot; <span id="sceneCount">Scene library</span></div>
+      .remote-panel {
+        margin-top: 16px;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      .remote-panel h2 {
+        font-size: 1rem;
+        margin: 0 0 8px;
+      }
+      .remote-panel p,
+      .remote-panel output {
+        display: block;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.5;
+        white-space: pre-line;
+      }
+      .remote-panel label {
+        display: block;
+        margin: 12px 0;
+        font-size: 0.85rem;
+      }
+      .remote-panel select,
+      .remote-panel input[type="number"] {
+        display: block;
+        width: 100%;
+        max-width: 300px;
+        padding: 10px;
+        margin-top: 6px;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .remote-panel button {
+        margin: 5px 6px 5px 0;
+      }
+      .remote-panel summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%) translateY(20px);
+        background: #0b1220;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 10px 16px;
+        border-radius: 10px;
+        font-size: 0.85rem;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      .toast.err {
+        border-color: var(--bad);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>Scene Control</h1>
+          <div class="sub">
+            ImmersiveSmilePlus VR &middot;
+            <span id="sceneCount">Scene library</span>
+          </div>
+        </div>
+        <div class="status">
+          <span id="dot" class="dot"></span
+          ><span id="statusText">connecting…</span>
+        </div>
+      </header>
+
+      <div id="banner" class="banner err">
+        Set your database URL: open this file and replace
+        <code>YOUR_PROJECT-default-rtdb.firebaseio.com</code> in the
+        <code>DB_URL</code> constant.
       </div>
-      <div class="status"><span id="dot" class="dot"></span><span id="statusText">connecting…</span></div>
-    </header>
 
-    <div id="banner" class="banner err">
-      Set your database URL: open this file and replace
-      <code>YOUR_PROJECT-default-rtdb.firebaseio.com</code> in the <code>DB_URL</code> constant.
+      <label class="device-search" for="deviceSearch"
+        >Find a headset
+        <input
+          id="deviceSearch"
+          type="search"
+          placeholder="Device UID, headset name or Firebase record ID"
+          autocomplete="off"
+        />
+      </label>
+      <div id="users"></div>
+      <div id="empty" class="empty" style="display: none">
+        No headsets connected yet. Launch the app on a device.
+      </div>
     </div>
 
-    <label class="device-search" for="deviceSearch">Find a headset
-      <input id="deviceSearch" type="search" placeholder="Device UID, headset name or Firebase record ID" autocomplete="off" />
-    </label>
-    <div id="users"></div>
-    <div id="empty" class="empty" style="display:none">No headsets connected yet. Launch the app on a device.</div>
-  </div>
+    <div id="toast" class="toast"></div>
 
-  <div id="toast" class="toast"></div>
+    <script src="remote-controls.js"></script>
+    <script>
+      // ── CONFIG ──────────────────────────────────────────────────────────────
+      const DB_URL =
+        "https://immersivesmile-test-default-rtdb.asia-southeast1.firebasedatabase.app/";
 
-  <script src="remote-controls.js"></script>
-  <script>
-    // ── CONFIG ──────────────────────────────────────────────────────────────
-    const DB_URL = "https://immersivesmile-test-default-rtdb.asia-southeast1.firebasedatabase.app/";
+      // Must match SceneSelector.cs Scene Mappings and Unity Build Settings.
+      const SCENES = [
+        {
+          id: 0,
+          name: "MainScene",
+          label: "Main Menu",
+          group: "Classic scenes",
+        },
+        {
+          id: 1,
+          name: "Scene_1_Car_dealership",
+          label: "Car Dealership",
+          group: "Classic scenes",
+        },
+        {
+          id: 2,
+          name: "Scene_2_Castle",
+          label: "Castle",
+          group: "Classic scenes",
+        },
+        { id: 3, name: "Scene_R1", label: "Scene R1", group: "Classic scenes" },
+        { id: 4, name: "Scene_3_farm", label: "Farm", group: "Classic scenes" },
+        {
+          id: 20,
+          name: "SleepingOcean",
+          label: "Sleeping Ocean",
+          group: "Experiences",
+        },
+        {
+          id: 21,
+          name: "LumiStarfall",
+          label: "Lumi Starfall · Pearl Garden",
+          group: "Experiences",
+        },
+        {
+          id: 22,
+          name: "DreamRoad",
+          label: "Dream Road",
+          group: "Experiences",
+        },
+        {
+          id: 23,
+          name: "CloudVoyage",
+          label: "Cloud Voyage",
+          group: "Experiences",
+        },
+        { id: 24, name: "StarHeart", label: "StarHeart", group: "Experiences" },
+        {
+          id: 25,
+          name: "FastLumiValley",
+          label: "Lumi Valley · Heartlight",
+          group: "Experiences",
+        },
+        {
+          id: 26,
+          name: "ImpossibleGarden",
+          label: "Impossible Garden",
+          group: "Impossible Garden variants",
+        },
+        {
+          id: 27,
+          name: "ImpossibleGarden_NoVideos",
+          label: "Impossible Garden · No Videos",
+          group: "Impossible Garden variants",
+        },
+        {
+          id: 28,
+          name: "ImpossibleGarden_Mochi",
+          label: "Impossible Garden · Mochi",
+          group: "Impossible Garden variants",
+        },
+        {
+          id: 29,
+          name: "ImpossibleGarden_Mochi_NoVideos",
+          label: "Impossible Garden · Mochi / No Videos",
+          group: "Impossible Garden variants",
+        },
+        {
+          id: 30,
+          name: "LumiValley",
+          label: "Lumi Valley · Pip Journey",
+          group: "Experiences",
+        },
+        {
+          id: 31,
+          name: "spaceIsland",
+          label: "Space Island",
+          group: "Experiences",
+        },
+        {
+          id: 32,
+          name: "Scene_4_Solarland",
+          label: "Solarland · Sun-Seed Airship",
+          group: "Experiences",
+        },
+        {
+          id: 33,
+          name: "SinharajaSanctuary",
+          label: "Sinharaja Rainforest",
+          group: "Experiences",
+        },
+        {
+          id: 34,
+          name: "Nightfall_Main",
+          label: "Nightfall · Luxury Drive",
+          group: "Experiences",
+        },
+        {
+          id: 35,
+          name: "JustOneBiscuit",
+          label: "Just One Biscuit",
+          group: "Experiences",
+        },
+      ];
+      const SCENE_GROUPS = [
+        "Experiences",
+        "Impossible Garden variants",
+        "Classic scenes",
+      ];
+      document.getElementById("sceneCount").textContent =
+        SCENES.length + " scenes available";
+      // How much of a scene plays before it loops. Each segment is ~30s of authored
+      // content; a scene that has fewer simply clamps (SceneSelector -> ISegmentedLoop).
+      // Must match SceneSelector.cs maxSegments.
+      const SEGMENTS = [
+        { n: 1, label: "30s" },
+        { n: 2, label: "1 min" },
+        { n: 3, label: "1:30" },
+      ];
+      const DEFAULT_SEGMENTS = 1;
 
-    // Must match SceneSelector.cs Scene Mappings and Unity Build Settings.
-    const SCENES = [
-      { id: 0, name: "MainScene", label: "Main Menu", group: "Classic scenes" },
-      { id: 1, name: "Scene_1_Car_dealership", label: "Car Dealership", group: "Classic scenes" },
-      { id: 2, name: "Scene_2_Castle", label: "Castle", group: "Classic scenes" },
-      { id: 3, name: "Scene_R1", label: "Scene R1", group: "Classic scenes" },
-      { id: 4, name: "Scene_3_farm", label: "Farm", group: "Classic scenes" },
-      { id: 20, name: "SleepingOcean", label: "Sleeping Ocean", group: "Experiences" },
-      { id: 21, name: "LumiStarfall", label: "Lumi Starfall · Pearl Garden", group: "Experiences" },
-      { id: 22, name: "DreamRoad", label: "Dream Road", group: "Experiences" },
-      { id: 23, name: "CloudVoyage", label: "Cloud Voyage", group: "Experiences" },
-      { id: 24, name: "StarHeart", label: "StarHeart", group: "Experiences" },
-      { id: 25, name: "FastLumiValley", label: "Lumi Valley · Heartlight", group: "Experiences" },
-      { id: 26, name: "ImpossibleGarden", label: "Impossible Garden", group: "Impossible Garden variants" },
-      { id: 27, name: "ImpossibleGarden_NoVideos", label: "Impossible Garden · No Videos", group: "Impossible Garden variants" },
-      { id: 28, name: "ImpossibleGarden_Mochi", label: "Impossible Garden · Mochi", group: "Impossible Garden variants" },
-      { id: 29, name: "ImpossibleGarden_Mochi_NoVideos", label: "Impossible Garden · Mochi / No Videos", group: "Impossible Garden variants" },
-      { id: 30, name: "LumiValley", label: "Lumi Valley · Pip Journey", group: "Experiences" },
-      { id: 31, name: "spaceIsland", label: "Space Island", group: "Experiences" },
-      { id: 32, name: "Scene_4_Solarland", label: "Solarland · Sun-Seed Airship", group: "Experiences" },
-      { id: 33, name: "SinharajaSanctuary", label: "Sinharaja Rainforest", group: "Experiences" },
-      { id: 34, name: "Nightfall_Main", label: "Nightfall · Luxury Drive", group: "Experiences" },
-      { id: 35, name: "JustOneBiscuit", label: "Just One Biscuit", group: "Experiences" },
-    ];
-    const SCENE_GROUPS = ["Experiences", "Impossible Garden variants", "Classic scenes"];
-    document.getElementById("sceneCount").textContent = SCENES.length + " scenes available";
-    // How much of a scene plays before it loops. Each segment is ~30s of authored
-    // content; a scene that has fewer simply clamps (SceneSelector -> ISegmentedLoop).
-    // Must match SceneSelector.cs maxSegments.
-    const SEGMENTS = [
-      { n: 1, label: "30s" },
-      { n: 2, label: "1 min" },
-      { n: 3, label: "1:30" },
-    ];
-    const DEFAULT_SEGMENTS = 1;
+      const OFFLINE_MS = 15000; // a user is "offline" if no update seen within this window
+      // ────────────────────────────────────────────────────────────────────────
 
-    const OFFLINE_MS = 15000; // a user is "offline" if no update seen within this window
-    // ────────────────────────────────────────────────────────────────────────
+      const base = DB_URL.replace(/\/$/, "");
+      const usersUrl = base + "/users.json";
+      const configured = !DB_URL.includes("YOUR_PROJECT");
 
-    const base = DB_URL.replace(/\/$/, "");
-    const usersUrl = base + "/users.json";
-    const configured = !DB_URL.includes("YOUR_PROJECT");
+      const usersEl = document.getElementById("users");
+      const emptyEl = document.getElementById("empty");
+      const dot = document.getElementById("dot");
+      const statusText = document.getElementById("statusText");
+      const toastEl = document.getElementById("toast");
+      const banner = document.getElementById("banner");
+      const deviceSearch = document.getElementById("deviceSearch");
 
-    const usersEl = document.getElementById("users");
-    const emptyEl = document.getElementById("empty");
-    const dot = document.getElementById("dot");
-    const statusText = document.getElementById("statusText");
-    const toastEl = document.getElementById("toast");
-    const banner = document.getElementById("banner");
-    const deviceSearch = document.getElementById("deviceSearch");
+      let state = {}; // mirror of /users
+      let pollTimer = null;
 
-    let state = {};                 // mirror of /users
-    let pollTimer = null;
+      const sceneById = (id) => SCENES.find((s) => s.id === id);
+      // custom label set from this dashboard, else the model name the headset reported
+      const displayName = (u) => (u && (u.label || u.name)) || "Headset";
+      const num = (x) => (typeof x === "number" ? x : 0);
+      const esc = (s) =>
+        String(s ?? "").replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      const fmt = (v) =>
+        Number.isFinite(+v) ? (+v).toFixed(1).replace(/\.0$/, "") : "0";
 
-    const sceneById = (id) => SCENES.find((s) => s.id === id);
-    // custom label set from this dashboard, else the model name the headset reported
-    const displayName = (u) => (u && (u.label || u.name)) || "Headset";
-    const num = (x) => (typeof x === "number" ? x : 0);
-    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
-    const fmt = (v) => (Number.isFinite(+v) ? (+v).toFixed(1).replace(/\.0$/, "") : "0");
-
-    function toast(msg, isErr) {
-      toastEl.textContent = msg;
-      toastEl.className = "toast show" + (isErr ? " err" : "");
-      clearTimeout(toast._t);
-      toast._t = setTimeout(() => (toastEl.className = "toast"), 2200);
-    }
-    function setStatus(cls, text) { dot.className = "dot " + cls; statusText.textContent = text; }
-
-    // ── Apply Firebase stream events to the local mirror ──────────────────────
-    // Only a headset heartbeat proves presence. Scene writes and snapshots do not.
-    function heartbeatAge(u) {
-      const timestamp = typeof u?.lastSeen === "number" ? u.lastSeen : Date.parse(u?.lastSeen);
-      return Number.isFinite(timestamp) ? Math.max(0, Date.now() - timestamp) : Infinity;
-    }
-    function isOnline(id) { return heartbeatAge(state[id]) < OFFLINE_MS; }
-    function deviceUid(u) {
-      const uid = typeof u?.deviceUid === "string" ? u.deviceUid.trim().toLowerCase() : "";
-      return (!u?.deviceUidSource || u.deviceUidSource === "android_id") && /^[a-f0-9]{1,16}$/.test(uid)
-        && !/^0+$/.test(uid) && uid !== "9774d56d682e549c" ? uid : "";
-    }
-    // Group only actual Android UIDs. Missing IDs and installation fallbacks are not shared identities.
-    function deviceRecords() {
-      const groups = new Map();
-      for (const id of Object.keys(state)) {
-        const u = state[id];
-        if (!u || typeof u !== "object" || Array.isArray(u)) continue;
-        const uid = deviceUid(u), key = uid ? "uid:" + uid : "node:" + id;
-        if (!groups.has(key)) groups.set(key, {uid, ids:[]});
-        groups.get(key).ids.push(id);
+      function toast(msg, isErr) {
+        toastEl.textContent = msg;
+        toastEl.className = "toast show" + (isErr ? " err" : "");
+        clearTimeout(toast._t);
+        toast._t = setTimeout(() => (toastEl.className = "toast"), 2200);
       }
-      return [...groups.values()].map(record => {
-        record.ids.sort((a,b) => heartbeatAge(state[a]) - heartbeatAge(state[b]) || a.localeCompare(b));
-        return {...record, id:record.ids[0], conflict:record.ids.filter(isOnline).length > 1};
-      }).sort((a,b) => Number(isOnline(b.id)) - Number(isOnline(a.id)) || heartbeatAge(state[a.id]) - heartbeatAge(state[b.id]));
-    }
-    function canControl(id) {
-      if (!isOnline(id)) return false;
-      const record = deviceRecords().find(record => record.ids.includes(id));
-      return !!record && record.id === id && !record.conflict;
-    }
-    function batteryInfo(u) {
-      const value = u?.batteryPercentage;
-      if (!Number.isInteger(value) || value < 0 || value > 100) return {text:"Battery unavailable", className:"unknown"};
-      if (heartbeatAge(u) >= OFFLINE_MS) return {text:"Battery " + value + "% · last reported (stale)", className:"stale"};
-      return {text:"Battery " + value + "%" + (value <= 20 ? " · low" : ""), className:value <= 20 ? "low" : ""};
-    }
-    function lastSeenLabel(u) {
-      const age = heartbeatAge(u);
-      if (!Number.isFinite(age)) return "No heartbeat received";
-      if (age < OFFLINE_MS) return "Connected · heartbeat " + Math.floor(age / 1000) + "s ago";
-      if (age < 60000) return "Offline / asleep · last seen " + Math.floor(age / 1000) + "s ago";
-      if (age < 3600000) return "Offline / asleep · last seen " + Math.floor(age / 60000) + "m ago";
-      return "Offline / asleep · last seen " + Math.floor(age / 3600000) + "h ago";
-    }
-    function requireOnline(id) {
-      if (canControl(id)) return true;
-      toast(isOnline(id) ? "Multiple active records share this device UID. Resolve the duplicate connection before sending controls."
-        : "This headset is offline or asleep. Put it on and open the app first.", true);
-      render();
-      return false;
-    }
-    function nodeAt(parts, create) {
-      let obj = state;
-      for (const p of parts) {
-        if (typeof obj[p] !== "object" || obj[p] === null) { if (!create) return null; obj[p] = {}; }
-        obj = obj[p];
-      }
-      return obj;
-    }
-    function applyPut(env) {
-      const parts = (env.path || "/").split("/").filter(Boolean);
-      if (parts.some(p => ["__proto__", "prototype", "constructor"].includes(p))) return;
-      if (parts.length === 0) {
-        state = (env.data && typeof env.data === "object") ? env.data : {};
-      } else {
-        const parent = nodeAt(parts.slice(0, -1), true);
-        const leaf = parts[parts.length - 1];
-        if (env.data === null || env.data === undefined) delete parent[leaf];
-        else parent[leaf] = env.data;
-      }
-    }
-    function applyPatch(env) {
-      for (const [key, value] of Object.entries(env.data || {})) {
-        applyPut({path: (env.path || "/").replace(/\/$/, "") + "/" + key, data: value});
-      }
-    }
-
-    // ── Render ────────────────────────────────────────────────────────────────
-    function render() {
-      const openPanels = new Set(Array.from(usersEl.querySelectorAll("details[id][open]")).map(el => el.id));
-      const focused = document.activeElement;
-      const focusId = focused?.id;
-      const selection = focused?.selectionStart;
-      const query = (deviceSearch.value || "").trim().toLowerCase();
-      const records = deviceRecords().filter(record => !query || record.ids.some(id =>
-        [id, state[id].deviceUid, state[id].staticDeviceId, state[id].label, state[id].name]
-          .some(value => typeof value === "string" && value.toLowerCase().includes(query))));
-      const online = records.filter(record => isOnline(record.id)), offline = records.filter(record => !isOnline(record.id));
-      emptyEl.style.display = online.length || (query && records.length) ? "none" : "block";
-      emptyEl.textContent = query && !records.length ? "No headsets match your search." : "No active headsets. Put on the Quest and open ImmersiveSmile to connect.";
-      const expanded = usersEl.querySelector(".offline-list")?.open || false;
-      usersEl.innerHTML = "";
-      online.forEach(record => usersEl.appendChild(card(record.id, record)));
-      if (offline.length) {
-        const group = document.createElement("details");
-        group.className = "offline-list"; group.open = expanded || !!query;
-        const summary = document.createElement("summary");
-        summary.textContent = offline.length + " offline / saved devices";
-        group.appendChild(summary);
-        offline.forEach(record => group.appendChild(card(record.id, record)));
-        usersEl.appendChild(group);
-      }
-      for (const panel of usersEl.querySelectorAll("details[id]")) panel.open = openPanels.has(panel.id);
-      if (focusId && focused !== document.activeElement) {
-        const next = document.getElementById(focusId);
-        next?.focus?.({preventScroll:true});
-        if (typeof selection === "number") next?.setSelectionRange?.(selection, selection);
-      }
-    }
-
-    function card(id, record = deviceRecords().find(record => record.ids.includes(id))) {
-      const u = state[id] || {};
-      const online = isOnline(id);
-      const controllable = canControl(id);
-      const sceneId = u.scene && typeof u.scene.id === "number" ? u.scene.id : null;
-      const segs = segmentsOf(u);
-      const stopped = stopOf(u) || (isNightfall(u) && u.nightfall?.status?.stopped === true);
-
-      const el = document.createElement("div");
-      el.className = "card-user" + (online ? "" : " off") + (stopped ? " ended" : "");
-
-      const head = document.createElement("div");
-      head.className = "u-head";
-      head.innerHTML =
-        '<span class="u-dot ' + (online ? "on" : "off") + '"></span>' +
-        '<div class="u-id"><div class="u-name">' + esc(displayName(u)) +
-        ' <button class="u-edit" title="Rename this headset" aria-label="Rename this headset">✎</button></div>' +
-        '<div class="u-sub">' + (u.label && u.name ? esc(u.name) + ' &middot; ' : '') + esc(lastSeenLabel(u)) + '</div></div>' +
-        '<div class="u-input">BLE input<br><b>' + fmt(u.input) + '</b></div>' +
-        '<button class="u-x" title="Remove user">✕</button>';
-      head.querySelector(".u-x").addEventListener("click", () => removeUser(id));
-      head.querySelector(".u-edit").addEventListener("click", () => {
-        const next = window.prompt("Name for this headset (leave empty to go back to \"" + (u.name || "Headset") + "\")", u.label || "");
-        if (next !== null) renameUser(id, next);
-      });
-      el.appendChild(head);
-
-      const identity = document.createElement("div");
-      identity.className = "u-identity";
-      identity.innerHTML = record?.uid ? 'Device UID · <strong>' + esc(u.deviceUid) + '</strong>' : 'Device UID unavailable · awaiting a compatible headset report';
-      el.appendChild(identity);
-      const battery = batteryInfo(u), batteryEl = document.createElement("div");
-      batteryEl.className = "battery " + battery.className;
-      batteryEl.textContent = battery.text;
-      el.appendChild(batteryEl);
-      const details = document.createElement("details");
-      details.className = "u-identity"; details.id = "device-" + id + "-details";
-      const summary = document.createElement("summary"); summary.textContent = "Device record details"; details.appendChild(summary);
-      const metadata = document.createElement("div");
-      metadata.textContent = "Current Firebase record: " + id + (u.staticDeviceId ? " · Additional app ID: " + u.staticDeviceId : "");
-      details.appendChild(metadata);
-      if (record?.ids.length > 1) {
-        const history = document.createElement("div");
-        history.textContent = "Other records for this UID: " + record.ids.filter(other => other !== id).join(", ");
-        details.appendChild(history);
-      }
-      el.appendChild(details);
-      if (record?.conflict) {
-        const warning = document.createElement("div"); warning.className = "connection-note";
-        warning.textContent = "Multiple active records report this UID. Controls are disabled until only one connection remains active.";
-        el.appendChild(warning);
+      function setStatus(cls, text) {
+        dot.className = "dot " + cls;
+        statusText.textContent = text;
       }
 
-      const current = document.createElement("div");
-      current.className = "current-scene";
-      const selected = sceneById(sceneId);
-      current.textContent = "Requested scene: " + (selected ? selected.label : sceneId === null ? "Not selected" : "Unknown scene (ID " + sceneId + ")");
-      el.appendChild(current);
-      const reported = reportedScene(u);
-      if (reported) { const live = document.createElement("div"); live.className="current-scene"; live.textContent="Headset reports: " + (SCENES.find(s=>s.name===reported)?.label || reported); el.appendChild(live); }
-
-      for (const group of SCENE_GROUPS) {
-        const section = document.createElement("fieldset");
-        section.className = "scene-group";
-        const legend = document.createElement("legend");
-        legend.textContent = group;
-        section.appendChild(legend);
-        const row = document.createElement("div");
-        row.className = "s-row";
-        for (const s of SCENES.filter((scene) => scene.group === group)) {
-          const b = document.createElement("button");
-          b.type = "button";
-          b.className = "s-btn" + (s.id === sceneId ? " active" : "");
-          b.textContent = s.label;
-          b.title = s.name + " · ID " + s.id;
-          b.setAttribute("aria-pressed", String(s.id === sceneId));
-          b.disabled = !controllable;
-          b.addEventListener("click", () => setUserScene(id, s));
-          row.appendChild(b);
+      // ── Apply Firebase stream events to the local mirror ──────────────────────
+      // Only a headset heartbeat proves presence. Scene writes and snapshots do not.
+      function heartbeatAge(u) {
+        const timestamp =
+          typeof u?.lastSeen === "number"
+            ? u.lastSeen
+            : Date.parse(u?.lastSeen);
+        return Number.isFinite(timestamp)
+          ? Math.max(0, Date.now() - timestamp)
+          : Infinity;
+      }
+      function isOnline(id) {
+        return heartbeatAge(state[id]) < OFFLINE_MS;
+      }
+      function deviceUid(u) {
+        const uid =
+          typeof u?.deviceUid === "string"
+            ? u.deviceUid.trim().toLowerCase()
+            : "";
+        return (!u?.deviceUidSource || u.deviceUidSource === "android_id") &&
+          /^[a-f0-9]{1,16}$/.test(uid) &&
+          !/^0+$/.test(uid) &&
+          uid !== "9774d56d682e549c"
+          ? uid
+          : "";
+      }
+      // Group only actual Android UIDs. Missing IDs and installation fallbacks are not shared identities.
+      function deviceRecords() {
+        const groups = new Map();
+        for (const id of Object.keys(state)) {
+          const u = state[id];
+          if (!u || typeof u !== "object" || Array.isArray(u)) continue;
+          const uid = deviceUid(u),
+            key = uid ? "uid:" + uid : "node:" + id;
+          if (!groups.has(key)) groups.set(key, { uid, ids: [] });
+          groups.get(key).ids.push(id);
         }
-        section.appendChild(row);
-        el.appendChild(section);
+        return [...groups.values()]
+          .map((record) => {
+            record.ids.sort(
+              (a, b) =>
+                heartbeatAge(state[a]) - heartbeatAge(state[b]) ||
+                a.localeCompare(b),
+            );
+            return {
+              ...record,
+              id: record.ids[0],
+              conflict: record.ids.filter(isOnline).length > 1,
+            };
+          })
+          .sort(
+            (a, b) =>
+              Number(isOnline(b.id)) - Number(isOnline(a.id)) ||
+              heartbeatAge(state[a.id]) - heartbeatAge(state[b.id]),
+          );
       }
-
-      const seg = document.createElement("div");
-      seg.className = "seg";
-      const lab = document.createElement("div");
-      lab.className = "seg-label";
-      lab.innerHTML = "Loop length &middot; <b>" + segs + "</b> segment" + (segs === 1 ? "" : "s");
-      seg.appendChild(lab);
-      for (const s of SEGMENTS) {
-        const b = document.createElement("button");
-        b.className = "seg-btn" + (s.n === segs ? " active" : "");
-        b.textContent = s.label;
-        b.title = s.n + " x 30s segment" + (s.n === 1 ? "" : "s");
-        b.disabled = !controllable;
-        b.addEventListener("click", () => setUserSegments(id, s.n));
-        seg.appendChild(b);
+      function canControl(id) {
+        if (!isOnline(id)) return false;
+        const record = deviceRecords().find((record) =>
+          record.ids.includes(id),
+        );
+        return !!record && record.id === id && !record.conflict;
       }
-
-      const stopBtn = document.createElement("button");
-      stopBtn.className = "seg-btn stop-btn" + (stopped ? " stopped" : "");
-      stopBtn.textContent = isNightfall(u) ? (stopped ? "Resume showcase" : "STOP") : stopped ? "Resume" : "End";
-      stopBtn.title = isNightfall(u) ? "Nightfall staff pause / resume" : "Request the current scene’s ending or resume";
-      stopBtn.disabled = !controllable;
-      stopBtn.addEventListener("click", () => setUserStop(id, !stopped));
-      seg.appendChild(stopBtn);
-
-      el.appendChild(seg);
-
-      if (stopped) {
-        const note = document.createElement("div");
-        note.className = "ended-note";
-        note.textContent = isNightfall(u) ? "Nightfall is paused. Keep the headset on, then use Resume showcase below. Driving needs a fresh squeeze or trigger press." : "End requested — the headset handles its scene-specific ending.";
-        el.appendChild(note);
-      }
-
-      appendRemoteControls(el, id);
-      return el;
-    }
-
-    // ── Actions ────────────────────────────────────────────────────────────────
-    const segmentsOf = (u) => {
-      const n = u && u.scene ? u.scene.segments : null;
-      return Number.isFinite(+n) && +n >= 1 ? Math.min(+n, SEGMENTS.length) : DEFAULT_SEGMENTS;
-    };
-
-    const stopOf = (u) => !!(u && u.scene && u.scene.stop === true);
-
-    // PUT replaces the whole scene node, so the current segment count has to be
-    // carried across or switching scene would silently reset the loop length.
-    // stop is deliberately cleared instead: picking a scene means "play this now".
-    function setUserScene(id, s) {
-      if (!SCENES.some(item=>item.id===s.id && item.name===s.name)) return Promise.resolve();
-      return remoteAction(id, async current => {
-        const scene = {id:s.id,name:s.name,label:s.label,segments:segmentsOf(state[id]),stop:false,updatedAt:new Date().toISOString()};
-        if (await patchRemote(id, {scene}, current)) toast("Requested " + s.label + " on " + displayName(state[id]));
-      }, true);
-    }
-
-    function setUserStop(id, stop) {
-      if (isNightfall(state[id])) return stop ? stopNightfall(id) : commandNightfall(id, "resume");
-      return remoteAction(id, async current => {
-        if (await patchRemote(id, {"scene/stop":stop,"scene/updatedAt":new Date().toISOString()}, current))
-          toast(stop ? "End requested — the headset handles its scene-specific ending." : "Resume requested");
-      }, stop);
-    }
-
-    function setUserSegments(id, n) {
-      if (!SEGMENTS.some(s=>s.n===n)) return Promise.resolve();
-      return remoteAction(id, async current => {
-        if (await patchRemote(id, {"scene/segments":n,"scene/updatedAt":new Date().toISOString()}, current))
-          toast(n + " segment" + (n === 1 ? "" : "s") + " requested");
-      });
-    }
-
-    // The custom name is stored in its own key, /users/{id}/label. The headset writes
-    // "name" (its model, e.g. "Quest 3S") every time the app starts, but only ever merges
-    // its own keys, so a label set here survives restarts. Works for offline headsets too:
-    // it is a note on the record, not a command to the device.
-    async function renameUser(id, value) {
-      const label = String(value ?? "").trim().slice(0, 40);
-      try {
-        const res = await fetch(base + "/users/" + id + "/label.json", label
-          ? { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(label) }
-          : { method: "DELETE" });
-        if (!res.ok) return toast("Failed: " + res.status, true);
-        const node = nodeAt([id], true);
-        if (label) node.label = label; else delete node.label;
-        render();
-        toast(label ? "Renamed to " + label : "Name reset");
-      } catch {
-        toast("Network error", true);
-      }
-    }
-
-    async function removeUser(id) {
-      try {
-        await fetch(base + "/users/" + id + ".json", { method: "DELETE" });
-        delete state[id];
-        render();
-      } catch {
-        toast("Couldn't remove", true);
-      }
-    }
-
-    // ── Stream + polling fallback ───────────────────────────────────────────────
-    function connect() {
-      try {
-        const es = new EventSource(usersUrl);
-        const handle = (apply) => (e) => {
-          stopPolling();
-          setStatus("live", "database connected");
-          try { apply(JSON.parse(e.data)); render(); } catch { /* keep-alive / null */ }
+      function batteryInfo(u) {
+        const value = u?.batteryPercentage;
+        if (!Number.isInteger(value) || value < 0 || value > 100)
+          return { text: "Battery unavailable", className: "unknown" };
+        if (heartbeatAge(u) >= OFFLINE_MS)
+          return {
+            text: "Battery " + value + "% · last reported (stale)",
+            className: "stale",
+          };
+        return {
+          text: "Battery " + value + "%" + (value <= 20 ? " · low" : ""),
+          className: value <= 20 ? "low" : "",
         };
-        es.addEventListener("put", handle(applyPut));
-        es.addEventListener("patch", handle(applyPatch));
-        es.onopen = () => setStatus("live", "database connected");
-        es.onerror = () => { setStatus("poll", "polling…"); startPolling(); };
-      } catch {
-        startPolling();
       }
-    }
-
-    async function pollUsers() {
-      try {
-        const response = await fetch(usersUrl);
-        if (!response.ok) throw new Error("Database read failed: " + response.status);
-        const data = await response.json();
-        state = data || {};
+      function lastSeenLabel(u) {
+        const age = heartbeatAge(u);
+        if (!Number.isFinite(age)) return "No heartbeat received";
+        if (age < OFFLINE_MS)
+          return "Connected · heartbeat " + Math.floor(age / 1000) + "s ago";
+        if (age < 60000)
+          return (
+            "Offline / asleep · last seen " + Math.floor(age / 1000) + "s ago"
+          );
+        if (age < 3600000)
+          return (
+            "Offline / asleep · last seen " + Math.floor(age / 60000) + "m ago"
+          );
+        return (
+          "Offline / asleep · last seen " + Math.floor(age / 3600000) + "h ago"
+        );
+      }
+      function requireOnline(id) {
+        if (canControl(id)) return true;
+        toast(
+          isOnline(id)
+            ? "Multiple active records share this device UID. Resolve the duplicate connection before sending controls."
+            : "This headset is offline or asleep. Put it on and open the app first.",
+          true,
+        );
         render();
-      } catch {
-        setStatus("down", "unreachable");
+        return false;
       }
-    }
-    function startPolling() { if (!pollTimer) pollTimer = setInterval(pollUsers, 3000); }
-    function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+      function nodeAt(parts, create) {
+        let obj = state;
+        for (const p of parts) {
+          if (typeof obj[p] !== "object" || obj[p] === null) {
+            if (!create) return null;
+            obj[p] = {};
+          }
+          obj = obj[p];
+        }
+        return obj;
+      }
+      function applyPut(env) {
+        const parts = (env.path || "/").split("/").filter(Boolean);
+        if (
+          parts.some((p) =>
+            ["__proto__", "prototype", "constructor"].includes(p),
+          )
+        )
+          return;
+        if (parts.length === 0) {
+          state = env.data && typeof env.data === "object" ? env.data : {};
+        } else {
+          const parent = nodeAt(parts.slice(0, -1), true);
+          const leaf = parts[parts.length - 1];
+          if (env.data === null || env.data === undefined) delete parent[leaf];
+          else parent[leaf] = env.data;
+        }
+      }
+      function applyPatch(env) {
+        for (const [key, value] of Object.entries(env.data || {})) {
+          applyPut({
+            path: (env.path || "/").replace(/\/$/, "") + "/" + key,
+            data: value,
+          });
+        }
+      }
 
-    function init() {
-      banner.classList.toggle("show", !configured);
-      if (!configured) { setStatus("down", "not configured"); return; }
-      connect();
-      setInterval(render, 2000); // refresh online/offline state over time
-    }
+      // ── Render ────────────────────────────────────────────────────────────────
+      function render() {
+        const openPanels = new Set(
+          Array.from(usersEl.querySelectorAll("details[id][open]")).map(
+            (el) => el.id,
+          ),
+        );
+        const focused = document.activeElement;
+        const focusId = focused?.id;
+        const selection = focused?.selectionStart;
+        const query = (deviceSearch.value || "").trim().toLowerCase();
+        const records = deviceRecords().filter(
+          (record) =>
+            !query ||
+            record.ids.some((id) =>
+              [
+                id,
+                state[id].deviceUid,
+                state[id].staticDeviceId,
+                state[id].label,
+                state[id].name,
+              ].some(
+                (value) =>
+                  typeof value === "string" &&
+                  value.toLowerCase().includes(query),
+              ),
+            ),
+        );
+        const online = records.filter((record) => isOnline(record.id)),
+          offline = records.filter((record) => !isOnline(record.id));
+        emptyEl.style.display =
+          online.length || (query && records.length) ? "none" : "block";
+        emptyEl.textContent =
+          query && !records.length
+            ? "No headsets match your search."
+            : "No active headsets. Put on the Quest and open ImmersiveSmile to connect.";
+        const expanded = usersEl.querySelector(".offline-list")?.open || false;
+        usersEl.innerHTML = "";
+        online.forEach((record) =>
+          usersEl.appendChild(card(record.id, record)),
+        );
+        if (offline.length) {
+          const group = document.createElement("details");
+          group.className = "offline-list";
+          group.open = expanded || !!query;
+          const summary = document.createElement("summary");
+          summary.textContent = offline.length + " offline / saved devices";
+          group.appendChild(summary);
+          offline.forEach((record) =>
+            group.appendChild(card(record.id, record)),
+          );
+          usersEl.appendChild(group);
+        }
+        for (const panel of usersEl.querySelectorAll("details[id]"))
+          panel.open = openPanels.has(panel.id);
+        if (focusId && focused !== document.activeElement) {
+          const next = document.getElementById(focusId);
+          next?.focus?.({ preventScroll: true });
+          if (typeof selection === "number")
+            next?.setSelectionRange?.(selection, selection);
+        }
+      }
 
-    deviceSearch.addEventListener("input", render);
-    init();
-  </script>
-</body>
+      function card(
+        id,
+        record = deviceRecords().find((record) => record.ids.includes(id)),
+      ) {
+        const u = state[id] || {};
+        const online = isOnline(id);
+        const controllable = canControl(id);
+        const sceneId =
+          u.scene && typeof u.scene.id === "number" ? u.scene.id : null;
+        const segs = segmentsOf(u);
+        const stopped =
+          stopOf(u) ||
+          (isNightfall(u) && u.nightfall?.status?.stopped === true);
+
+        const el = document.createElement("div");
+        el.className =
+          "card-user" + (online ? "" : " off") + (stopped ? " ended" : "");
+
+        const head = document.createElement("div");
+        head.className = "u-head";
+        head.innerHTML =
+          '<span class="u-dot ' +
+          (online ? "on" : "off") +
+          '"></span>' +
+          '<div class="u-id"><div class="u-name">' +
+          esc(displayName(u)) +
+          ' <button class="u-edit" title="Rename this headset" aria-label="Rename this headset">✎</button></div>' +
+          '<div class="u-sub">' +
+          (u.label && u.name ? esc(u.name) + " &middot; " : "") +
+          esc(lastSeenLabel(u)) +
+          "</div></div>" +
+          '<div class="u-input">BLE input<br><b>' +
+          fmt(u.input) +
+          "</b></div>" +
+          '<button class="u-x" title="Remove user">✕</button>';
+        head
+          .querySelector(".u-x")
+          .addEventListener("click", () => removeUser(id));
+        head.querySelector(".u-edit").addEventListener("click", () => {
+          const next = window.prompt(
+            'Name for this headset (leave empty to go back to "' +
+              (u.name || "Headset") +
+              '")',
+            u.label || "",
+          );
+          if (next !== null) renameUser(id, next);
+        });
+        el.appendChild(head);
+
+        const identity = document.createElement("div");
+        identity.className = "u-identity";
+        identity.innerHTML = record?.uid
+          ? "Device UID · <strong>" + esc(u.deviceUid) + "</strong>"
+          : "Device UID unavailable · awaiting a compatible headset report";
+        el.appendChild(identity);
+        const battery = batteryInfo(u),
+          batteryEl = document.createElement("div");
+        batteryEl.className = "battery " + battery.className;
+        batteryEl.textContent = battery.text;
+        el.appendChild(batteryEl);
+        const details = document.createElement("details");
+        details.className = "u-identity";
+        details.id = "device-" + id + "-details";
+        const summary = document.createElement("summary");
+        summary.textContent = "Device record details";
+        details.appendChild(summary);
+        const metadata = document.createElement("div");
+        metadata.textContent =
+          "Current Firebase record: " +
+          id +
+          (u.staticDeviceId ? " · Additional app ID: " + u.staticDeviceId : "");
+        details.appendChild(metadata);
+        if (record?.ids.length > 1) {
+          const history = document.createElement("div");
+          history.textContent =
+            "Other records for this UID: " +
+            record.ids.filter((other) => other !== id).join(", ");
+          details.appendChild(history);
+        }
+        el.appendChild(details);
+        if (record?.conflict) {
+          const warning = document.createElement("div");
+          warning.className = "connection-note";
+          warning.textContent =
+            "Multiple active records report this UID. Controls are disabled until only one connection remains active.";
+          el.appendChild(warning);
+        }
+
+        const current = document.createElement("div");
+        current.className = "current-scene";
+        const selected = sceneById(sceneId);
+        current.textContent =
+          "Requested scene: " +
+          (selected
+            ? selected.label
+            : sceneId === null
+              ? "Not selected"
+              : "Unknown scene (ID " + sceneId + ")");
+        el.appendChild(current);
+        const reported = reportedScene(u);
+        if (reported) {
+          const live = document.createElement("div");
+          live.className = "current-scene";
+          live.textContent =
+            "Headset reports: " +
+            (SCENES.find((s) => s.name === reported)?.label || reported);
+          el.appendChild(live);
+        }
+
+        for (const group of SCENE_GROUPS) {
+          const section = document.createElement("fieldset");
+          section.className = "scene-group";
+          const legend = document.createElement("legend");
+          legend.textContent = group;
+          section.appendChild(legend);
+          const row = document.createElement("div");
+          row.className = "s-row";
+          for (const s of SCENES.filter((scene) => scene.group === group)) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "s-btn" + (s.id === sceneId ? " active" : "");
+            b.textContent = s.label;
+            b.title = s.name + " · ID " + s.id;
+            b.setAttribute("aria-pressed", String(s.id === sceneId));
+            b.disabled = !controllable;
+            b.addEventListener("click", () => setUserScene(id, s));
+            row.appendChild(b);
+          }
+          section.appendChild(row);
+          el.appendChild(section);
+        }
+
+        const seg = document.createElement("div");
+        seg.className = "seg";
+        const lab = document.createElement("div");
+        lab.className = "seg-label";
+        lab.innerHTML =
+          "Loop length &middot; <b>" +
+          segs +
+          "</b> segment" +
+          (segs === 1 ? "" : "s");
+        seg.appendChild(lab);
+        for (const s of SEGMENTS) {
+          const b = document.createElement("button");
+          b.className = "seg-btn" + (s.n === segs ? " active" : "");
+          b.textContent = s.label;
+          b.title = s.n + " x 30s segment" + (s.n === 1 ? "" : "s");
+          b.disabled = !controllable;
+          b.addEventListener("click", () => setUserSegments(id, s.n));
+          seg.appendChild(b);
+        }
+
+        const stopBtn = document.createElement("button");
+        stopBtn.className = "seg-btn stop-btn" + (stopped ? " stopped" : "");
+        stopBtn.textContent = isNightfall(u)
+          ? stopped
+            ? "Resume showcase"
+            : "STOP"
+          : stopped
+            ? "Resume"
+            : "End";
+        stopBtn.title = isNightfall(u)
+          ? "Nightfall staff pause / resume"
+          : "Request the current scene’s ending or resume";
+        stopBtn.disabled = !controllable;
+        stopBtn.addEventListener("click", () => setUserStop(id, !stopped));
+        seg.appendChild(stopBtn);
+
+        el.appendChild(seg);
+
+        if (stopped) {
+          const note = document.createElement("div");
+          note.className = "ended-note";
+          note.textContent = isNightfall(u)
+            ? "Nightfall is paused. Keep the headset on, then use Resume showcase below. Driving needs a fresh squeeze or trigger press."
+            : "End requested — the headset handles its scene-specific ending.";
+          el.appendChild(note);
+        }
+
+        appendRemoteControls(el, id);
+        return el;
+      }
+
+      // ── Actions ────────────────────────────────────────────────────────────────
+      const segmentsOf = (u) => {
+        const n = u && u.scene ? u.scene.segments : null;
+        return Number.isFinite(+n) && +n >= 1
+          ? Math.min(+n, SEGMENTS.length)
+          : DEFAULT_SEGMENTS;
+      };
+
+      const stopOf = (u) => !!(u && u.scene && u.scene.stop === true);
+
+      // PUT replaces the whole scene node, so the current segment count has to be
+      // carried across or switching scene would silently reset the loop length.
+      // stop is deliberately cleared instead: picking a scene means "play this now".
+      function setUserScene(id, s) {
+        if (!SCENES.some((item) => item.id === s.id && item.name === s.name))
+          return Promise.resolve();
+        return remoteAction(
+          id,
+          async (current) => {
+            const scene = {
+              id: s.id,
+              name: s.name,
+              label: s.label,
+              segments: segmentsOf(state[id]),
+              stop: false,
+              updatedAt: new Date().toISOString(),
+            };
+            if (await patchRemote(id, { scene }, current))
+              toast("Requested " + s.label + " on " + displayName(state[id]));
+          },
+          true,
+        );
+      }
+
+      function setUserStop(id, stop) {
+        if (isNightfall(state[id]))
+          return stop ? stopNightfall(id) : commandNightfall(id, "resume");
+        return remoteAction(
+          id,
+          async (current) => {
+            if (
+              await patchRemote(
+                id,
+                {
+                  "scene/stop": stop,
+                  "scene/updatedAt": new Date().toISOString(),
+                },
+                current,
+              )
+            )
+              toast(
+                stop
+                  ? "End requested — the headset handles its scene-specific ending."
+                  : "Resume requested",
+              );
+          },
+          stop,
+        );
+      }
+
+      function setUserSegments(id, n) {
+        if (!SEGMENTS.some((s) => s.n === n)) return Promise.resolve();
+        return remoteAction(id, async (current) => {
+          if (
+            await patchRemote(
+              id,
+              {
+                "scene/segments": n,
+                "scene/updatedAt": new Date().toISOString(),
+              },
+              current,
+            )
+          )
+            toast(n + " segment" + (n === 1 ? "" : "s") + " requested");
+        });
+      }
+
+      // The custom name is stored in its own key, /users/{id}/label. The headset writes
+      // "name" (its model, e.g. "Quest 3S") every time the app starts, but only ever merges
+      // its own keys, so a label set here survives restarts. Works for offline headsets too:
+      // it is a note on the record, not a command to the device.
+      async function renameUser(id, value) {
+        const label = String(value ?? "")
+          .trim()
+          .slice(0, 40);
+        try {
+          const res = await fetch(
+            base + "/users/" + id + "/label.json",
+            label
+              ? {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(label),
+                }
+              : { method: "DELETE" },
+          );
+          if (!res.ok) return toast("Failed: " + res.status, true);
+          const node = nodeAt([id], true);
+          if (label) node.label = label;
+          else delete node.label;
+          render();
+          toast(label ? "Renamed to " + label : "Name reset");
+        } catch {
+          toast("Network error", true);
+        }
+      }
+
+      async function removeUser(id) {
+        try {
+          await fetch(base + "/users/" + id + ".json", { method: "DELETE" });
+          delete state[id];
+          render();
+        } catch {
+          toast("Couldn't remove", true);
+        }
+      }
+
+      // ── Stream + polling fallback ───────────────────────────────────────────────
+      function connect() {
+        try {
+          const es = new EventSource(usersUrl);
+          const handle = (apply) => (e) => {
+            stopPolling();
+            setStatus("live", "database connected");
+            try {
+              apply(JSON.parse(e.data));
+              render();
+            } catch {
+              /* keep-alive / null */
+            }
+          };
+          es.addEventListener("put", handle(applyPut));
+          es.addEventListener("patch", handle(applyPatch));
+          es.onopen = () => setStatus("live", "database connected");
+          es.onerror = () => {
+            setStatus("poll", "polling…");
+            startPolling();
+          };
+        } catch {
+          startPolling();
+        }
+      }
+
+      async function pollUsers() {
+        try {
+          const response = await fetch(usersUrl);
+          if (!response.ok)
+            throw new Error("Database read failed: " + response.status);
+          const data = await response.json();
+          state = data || {};
+          render();
+        } catch {
+          setStatus("down", "unreachable");
+        }
+      }
+      function startPolling() {
+        if (!pollTimer) pollTimer = setInterval(pollUsers, 3000);
+      }
+      function stopPolling() {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function init() {
+        banner.classList.toggle("show", !configured);
+        if (!configured) {
+          setStatus("down", "not configured");
+          return;
+        }
+        connect();
+        setInterval(render, 2000); // refresh online/offline state over time
+      }
+
+      deviceSearch.addEventListener("input", render);
+      init();
+    </script>
+  </body>
 </html>
